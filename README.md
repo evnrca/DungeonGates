@@ -1,4 +1,4 @@
-# Dungeon Gates
+# DungeonGates
 
 A production-ready Minecraft Paper plugin for creating dungeon progression systems using WorldGuard regions and MythicMobs.
 
