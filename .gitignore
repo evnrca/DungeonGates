@@ -1,0 +1,28 @@
+# Build artifacts
+build/
+*.jar
+!src/main/resources/*.jar
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Gradle
+.gradle/
+gradlew
+gradlew.bat
+
+# Temporary files
+*.tmp
+*.temp
