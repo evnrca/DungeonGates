@@ -6,6 +6,7 @@ Lightweight Minecraft Paper plugin for dungeon progression using WorldGuard regi
 [![Java](https://img.shields.io/badge/Java-21-orange)](https://openjdk.org/)
 [![WorldGuard](https://img.shields.io/badge/WorldGuard-7.0+-green)](https://worldguard.enginehub.org/)
 [![MythicMobs](https://img.shields.io/badge/MythicMobs-5.6+-red)](https://www.mythicmobs.net/)
+[![SQLite](https://img.shields.io/badge/SQLite-Persistent-blue)](https://www.sqlite.org/)
 
 ---
 
@@ -17,9 +18,13 @@ Lightweight Minecraft Paper plugin for dungeon progression using WorldGuard regi
 - **Per-Player Progress** — Individual tracking, no interference
 - **In-Game Setup** — Register rooms with `/dg add <region> <kills>`
 - **Room Denial System** — Title messages, sounds, chat messages when denied
-- **Progress Persistence** — Retains access to completed rooms
+- **SQLite Progress Persistence** — Survives server restarts/reloads (stored in `plugins/DungeonGates/progress.db`)
 - **Progress Reset** — Clears on death, logout, teleport, world exit
-- **Configurable Denial** — CANCEL, VELOCITY, TELEPORT, KNOCKBACK
+- **Knockback Denial** — Players knocked back into previous room instead of teleported
+- **Entrance & Exit Control** — Second+ rooms require previous completion on entry AND exit
+- **Admin Bypass** — `dungeongates.bypass` permission skips all checks
+- **Debug Mode** — `/dg debug` for troubleshooting
+- **Configurable Denial** — Title, subtitle, sound, knockback strength
 - **Sound & Title Notifications** — Clear feedback when denied entry
 
 ---
@@ -40,7 +45,7 @@ Lightweight Minecraft Paper plugin for dungeon progression using WorldGuard regi
 1. Download `DungeonGates-1.0.0.jar` from [Releases](https://github.com/evnrca/DungeonGates/releases)
 2. Place in `plugins/` folder
 3. Ensure WorldGuard and MythicMobs are installed
-4. Start server → generates `plugins/DungeonGates/config.yml`
+4. Start server → generates `plugins/DungeonGates/config.yml` and `plugins/DungeonGates/progress.db`
 
 ---
 
@@ -75,12 +80,16 @@ Players kill required MythicMobs in each room to unlock the next.
 
 | Command | Permission | Description |
 |---------|------------|-------------|
-| `/dg add <region> <kills>` | `dungeongates.admin` | Register a room |
-| `/dg remove <region>` | `dungeongates.admin` | Remove a room |
-| `/dg list` | `dungeongates.admin` | List rooms |
+| `/dg add <world> <region> <kills>` | `dungeongates.admin` | Register a dungeon room (with world) |
+| `/dg add <region> <kills>` | `dungeongates.admin` | Register in 'world' (legacy) |
+| `/dg remove <world> <region>` | `dungeongates.admin` | Remove a room |
+| `/dg remove <region>` | `dungeongates.admin` | Remove from 'world' (legacy) |
+| `/dg list [world]` | `dungeongates.admin` | List rooms (all or specific world) |
 | `/dg status [player]` | `dungeongates.status` / `.others` | Check progress |
-| `/dg reset <player> [region]` | `dungeongates.reset` | Reset progress |
+| `/dg reset <player> [world] [region]` | `dungeongates.reset` | Reset progress |
 | `/dg reload` | `dungeongates.admin` | Reload config |
+| `/dg debug [on|off]` | `dungeongates.admin` | Toggle debug mode |
+| `/dg info` | `dungeongates.admin` | Show plugin info (version, author, repo) |
 
 ---
 
@@ -89,16 +98,17 @@ Players kill required MythicMobs in each room to unlock the next.
 1. **Register rooms** with `/dg add <region> <kills>` (order = registration order)
 2. **Players kill MythicMobs** in the WorldGuard region
 3. **On region entry**, plugin checks if previous room is complete
-4. **If not complete** → deny entry:
-   - **Title & Subtitle** — "ROOM LOCKED! Kill X more MythicMobs to proceed."
-   - **Sound** — Configurable (default: VILLAGER_NO)
-   - **Chat Message** — "You need X more MythicMob kills to enter region!"
-   - **Teleport Back** — Returns to last valid location in previous room
-5. **If complete** → Allow entry, update last valid location
+4. **On region exit**, plugin checks if current room is complete
+5. **If not complete** → deny entry/exit:
+    - **Title & Subtitle** — "ROOM LOCKED! Kill X more MythicMobs to proceed."
+    - **Sound** — Configurable (default: VILLAGER_NO)
+    - **Chat Message** — "You need X more MythicMob kills to enter region!"
+    - **Knockback** — Pushes player back into the previous room
+6. **If complete** → Allow entry/exit, update last valid location
 
 ### Room Access Rules
-- **First room** — Always accessible
-- **Next room in sequence** — Requires previous room completion
+- **First room** — Always accessible (entry and exit)
+- **Next room in sequence** — Requires previous room completion (entry AND exit)
 - **Previously completed rooms** — Always accessible (free return)
 - **Non-sequential rooms** — Blocked unless already completed
 
@@ -107,7 +117,7 @@ Progress is **fully cleared** when:
 - Player dies in dungeon
 - Player logs out
 - Player teleports out of dungeon
-- Player exits the dungeon world
+- Player exits the dungeon world (via portal, world change)
 
 After reset, player must re-complete all rooms.
 
@@ -119,7 +129,7 @@ After reset, player must re-complete all rooms.
 
 ```yaml
 denial:
-  action: CANCEL              # CANCEL, VELOCITY, TELEPORT, KNOCKBACK
+  action: CANCEL              # CANCEL, VELOCITY, TELEPORT, KNOCKBACK (KNOCKBACK recommended)
   velocity:
     horizontal: 1.5
     vertical: 0.4
@@ -155,6 +165,29 @@ rooms:
 | `dungeongates.status` | TRUE | Check own progress |
 | `dungeongates.status.others` | OP | Check others' progress |
 | `dungeongates.reset` | OP | Reset progress |
+| `dungeongates.bypass` | OP | Bypass all region checks (admin) |
+
+---
+
+## Progress Persistence (SQLite)
+
+Progress is stored in `plugins/DungeonGates/progress.db` (SQLite database):
+- **Survives restarts/reloads** — No progress lost on server restart
+- **WAL mode** — High concurrency, minimal locking
+- **Auto-saves** — On kill, quit, admin commands, shutdown
+- **In-memory cache** — Fast access for frequent operations
+
+Schema:
+```sql
+CREATE TABLE dungeon_progress (
+    uuid TEXT NOT NULL,
+    room_key TEXT NOT NULL,  -- "world:region"
+    kills INTEGER DEFAULT 0,
+    completed INTEGER DEFAULT 0,
+    last_updated INTEGER DEFAULT 0,
+    PRIMARY KEY (uuid, room_key)
+);
+```
 
 ---
 
@@ -167,7 +200,7 @@ cd DungeonGates
 # Output: build/libs/DungeonGates-1.0.0.jar
 ```
 
-Requires JDK 21. Dependencies: `paper-api` (compileOnly), `worldguard-bukkit`, `worldedit-bukkit`, `Mythic-Dist` (all compileOnly — not shaded).
+Requires JDK 21. Dependencies: `paper-api` (compileOnly), `worldguard-bukkit`, `worldedit-bukkit`, `Mythic-Dist` (all compileOnly — not shaded), `sqlite-jdbc` (shaded into JAR).
 
 ---
 
@@ -182,3 +215,4 @@ MIT License
 - [PaperMC](https://papermc.io/) — Server API
 - [WorldGuard](https://worldguard.enginehub.org/) — Region protection
 - [MythicMobs](https://www.mythicmobs.net/) — Custom mobs
+- [SQLite JDBC](https://github.com/xerial/sqlite-jdbc) — Embedded database
