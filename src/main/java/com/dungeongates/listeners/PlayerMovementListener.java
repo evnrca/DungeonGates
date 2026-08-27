@@ -230,12 +230,15 @@ public final class PlayerMovementListener implements Listener {
     }
     
     private void knockbackPlayer(@NotNull Player player, @NotNull Location fromLocation) {
-        // Cancel movement and apply knockback back into the room
-        Vector knockback = fromLocation.toVector().subtract(player.getLocation().toVector()).normalize();
+        // Calculate knockback vector toward the room center
+        Vector toRoom = fromLocation.toVector().subtract(player.getLocation().toVector());
         
-        // If no direction (same location), push backward
-        if (knockback.length() < 0.1) {
+        // If no direction (same location or zero vector), push backward relative to player facing
+        Vector knockback;
+        if (toRoom.length() < 0.1) {
             knockback = player.getLocation().getDirection().multiply(-1);
+        } else {
+            knockback = toRoom.normalize();
         }
         
         // Apply knockback - horizontal + slight vertical
