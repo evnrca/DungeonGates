@@ -11,8 +11,8 @@ Lightweight Minecraft Paper plugin for dungeon progression using WorldGuard regi
 
 ## Features
 
-- **WorldGuard Integration** — Dungeon rooms = existing WorldGuard regions (reflection-based API)
-- **MythicMobs Support** — Kill requirements via MythicMobs API (reflection-based)
+- **WorldGuard Integration** — Dungeon rooms = existing WorldGuard regions (direct compile-time API)
+- **MythicMobs Support** — Kill requirements via MythicMobs API (direct compile-time API)
 - **Linear Progression** — Complete room requirements before advancing
 - **Per-Player Progress** — Individual tracking, no interference
 - **In-Game Setup** — Register rooms with `/dg add <region> <kills>`
@@ -21,7 +21,6 @@ Lightweight Minecraft Paper plugin for dungeon progression using WorldGuard regi
 - **Progress Reset** — Clears on death, logout, teleport, world exit
 - **Configurable Denial** — CANCEL, VELOCITY, TELEPORT, KNOCKBACK
 - **Sound & Title Notifications** — Clear feedback when denied entry
-- **Zero Compile Dependencies** — Only Paper API; WorldGuard/MythicMobs via reflection
 
 ---
 
@@ -168,7 +167,7 @@ cd DungeonGates
 # Output: build/libs/DungeonGates-1.0.0.jar
 ```
 
-Requires JDK 21. Only dependency: `paper-api` (WorldGuard/MythicMobs via reflection at runtime).
+Requires JDK 21. Dependencies: `paper-api` (compileOnly), `worldguard-bukkit`, `worldedit-bukkit`, `Mythic-Dist` (all compileOnly — not shaded).
 
 ---
 
