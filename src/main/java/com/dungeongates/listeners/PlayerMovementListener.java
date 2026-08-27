@@ -16,6 +16,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -67,6 +68,12 @@ public final class PlayerMovementListener implements Listener {
             lastRegion = parts[1];
         }
         
+        // Check if player changed worlds (e.g., portal)
+        if (lastWorld != null && !lastWorld.equals(currentWorld)) {
+            // Player left the dungeon world entirely - reset progress
+            handleDungeonWorldExit(player, lastWorld, lastRegion);
+        }
+        
         // Update progress manager with current room
         progressManager.setCurrentRoom(player.getUniqueId(), currentKey);
         
@@ -76,7 +83,6 @@ public final class PlayerMovementListener implements Listener {
         }
         
         // CHECK: Player entering a dungeon region (was outside, now inside)
-        // For entry, we only need to allow/deny based on sequence (first room always allowed, next room requires completion)
         else if (currentKey != null && lastKey == null) {
             handleRegionEntry(player, currentWorld, currentRegion, event.getFrom());
         }
@@ -92,6 +98,25 @@ public final class PlayerMovementListener implements Listener {
             lastKnownRegion.put(player.getUniqueId(), currentKey);
         } else {
             lastKnownRegion.remove(player.getUniqueId());
+        }
+    }
+    
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onPlayerChangedWorld(@NotNull PlayerChangedWorldEvent event) {
+        Player player = event.getPlayer();
+        String fromWorld = event.getFrom().getName();
+        
+        // Check if player was in a dungeon region in the old world
+        String lastKey = lastKnownRegion.get(player.getUniqueId());
+        if (lastKey != null && lastKey.contains(":")) {
+            String[] parts = lastKey.split(":", 2);
+            String lastWorld = parts[0];
+            String lastRegion = parts[1];
+            
+            if (lastWorld.equals(fromWorld) && roomManager.isRegisteredRegion(lastRegion, lastWorld)) {
+                // Player left the dungeon world - reset progress
+                handleDungeonWorldExit(player, lastWorld, lastRegion);
+            }
         }
     }
     
@@ -112,12 +137,31 @@ public final class PlayerMovementListener implements Listener {
     }
     
     /**
+     * Handle player leaving the dungeon world entirely (portal, world change).
+     * Resets all progress.
+     */
+    private void handleDungeonWorldExit(@NotNull Player player, @NotNull String lastWorld, @NotNull String lastRegion) {
+        debug(player, "Left dungeon world (" + lastWorld + ") - resetting all progress");
+        
+        // Send message
+        String msg = plugin.getConfigManager().getPrefixedMessage("progress-reset-world-exit");
+        if (msg != null) {
+            player.sendMessage(colorize(msg));
+        }
+        
+        // Clear all progress
+        progressManager.resetProgress(player.getUniqueId());
+        lastKnownRegion.remove(player.getUniqueId());
+    }
+    
+    /**
      * Handle player EXITING a dungeon region.
      * Prevents leaving a room before completing required kills.
+     * First room (order 0) always allowed. Last room requires completion like any other room.
      */
     private void handleRegionExit(@NotNull Player player, @Nullable String fromWorld, @Nullable String fromRegion, 
-                                   @Nullable String toWorld, @Nullable String toRegion, 
-                                   @NotNull Location fromLocation) {
+                                    @Nullable String toWorld, @Nullable String toRegion, 
+                                    @NotNull Location fromLocation) {
         if (fromRegion == null || fromWorld == null) return;
         
         Room fromRoom = roomManager.getRoom(fromRegion, fromWorld);
@@ -140,7 +184,7 @@ public final class PlayerMovementListener implements Listener {
             return;
         }
         
-        // Room not completed - DENY EXIT
+        // Room not completed - DENY EXIT (applies to ALL rooms including last room)
         debug(player, "Room NOT completed - denying exit (kills: " + (roomProgress != null ? roomProgress.getKills() : 0) + "/" + fromRoom.getRequiredKills() + ")");
         handleFailedExit(player, fromRoom, fromLocation);
     }
@@ -169,7 +213,7 @@ public final class PlayerMovementListener implements Listener {
     
     /**
      * Handle player ENTERING a dungeon region.
-     * First room always allowed. Next room in sequence requires previous completion.
+     * First room always allowed. Next rooms require previous completion.
      */
     private void handleRegionEntry(@NotNull Player player, @NotNull String currentWorld, @NotNull String currentRegion, 
                                     @NotNull Location fromLocation) {
@@ -183,9 +227,6 @@ public final class PlayerMovementListener implements Listener {
         }
         
         // For entry to next rooms, we rely on the exit check from the previous room
-        // If they managed to enter, it means they either:
-        // 1. Completed the previous room (exit was allowed)
-        // 2. Are entering from outside (should be caught by exit check when they try to leave)
         // Just show progress
         sendProgressMessage(player, newRoom);
     }
