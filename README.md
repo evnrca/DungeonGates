@@ -11,14 +11,17 @@ Lightweight Minecraft Paper plugin for dungeon progression using WorldGuard regi
 
 ## Features
 
-- **WorldGuard Integration** — Dungeon rooms = existing WorldGuard regions
-- **MythicMobs Support** — Kill requirements via MythicMobs API (reflection, no compile dep)
+- **WorldGuard Integration** — Dungeon rooms = existing WorldGuard regions (reflection-based API)
+- **MythicMobs Support** — Kill requirements via MythicMobs API (reflection-based)
 - **Linear Progression** — Complete room requirements before advancing
 - **Per-Player Progress** — Individual tracking, no interference
 - **In-Game Setup** — Register rooms with `/dg add <region> <kills>`
-- **Failed Entry Actions** — VELOCITY, TELEPORT, CANCEL, KNOCKBACK
-- **Zero Dependencies** — Only Paper API at compile time; WorldGuard/MythicMobs via reflection
-- **Performance** — Event-based, cached regions, no scanning
+- **Room Denial System** — Title messages, sounds, chat messages when denied
+- **Progress Persistence** — Retains access to completed rooms
+- **Progress Reset** — Clears on death, logout, teleport, world exit
+- **Configurable Denial** — CANCEL, VELOCITY, TELEPORT, KNOCKBACK
+- **Sound & Title Notifications** — Clear feedback when denied entry
+- **Zero Compile Dependencies** — Only Paper API; WorldGuard/MythicMobs via reflection
 
 ---
 
@@ -82,53 +85,66 @@ Players kill required MythicMobs in each room to unlock the next.
 
 ---
 
+## How It Works
+
+1. **Register rooms** with `/dg add <region> <kills>` (order = registration order)
+2. **Players kill MythicMobs** in the WorldGuard region
+3. **On region entry**, plugin checks if previous room is complete
+4. **If not complete** → deny entry:
+   - **Title & Subtitle** — "ROOM LOCKED! Kill X more MythicMobs to proceed."
+   - **Sound** — Configurable (default: VILLAGER_NO)
+   - **Chat Message** — "You need X more MythicMob kills to enter region!"
+   - **Teleport Back** — Returns to last valid location in previous room
+5. **If complete** → Allow entry, update last valid location
+
+### Room Access Rules
+- **First room** — Always accessible
+- **Next room in sequence** — Requires previous room completion
+- **Previously completed rooms** — Always accessible (free return)
+- **Non-sequential rooms** — Blocked unless already completed
+
+### Progress Reset Conditions
+Progress is **fully cleared** when:
+- Player dies in dungeon
+- Player logs out
+- Player teleports out of dungeon
+- Player exits the dungeon world
+
+After reset, player must re-complete all rooms.
+
+---
+
 ## Configuration
 
 `plugins/DungeonGates/config.yml`
 
 ```yaml
-failed-entry:
-  action: VELOCITY          # VELOCITY, TELEPORT, CANCEL, KNOCKBACK
+denial:
+  action: CANCEL              # CANCEL, VELOCITY, TELEPORT, KNOCKBACK
   velocity:
     horizontal: 1.5
     vertical: 0.4
+  title: "&c&lROOM LOCKED!"
+  subtitle: "&7Kill &e{remaining} &7more MythicMobs to proceed."
+  sound: "ENTITY_VILLAGER_NO"
+  sound-volume: 1.0
+  sound-pitch: 1.0
 
 messages:
   prefix: "&8[&6Dungeon Gates&8] "
-  requirement-not-met: "&cYou need {remaining} more MythicMob kills!"
-  progress: "&eProgress: {current}/{required}"
-  completed: "&aRoom requirement completed!"
+  requirement-not-met: "&cYou need {remaining} more MythicMob kills to enter {region}!"
+  progress: "&eProgress: {current}/{required} MythicMobs killed"
+  completed: "&aRoom &e{region} &acompleted! You may now proceed."
+  progress-reset-death: "&cYou died! Your dungeon progress has been reset."
+  progress-reset-logout: "&cYour dungeon progress has been reset (logout)."
+  progress-reset-teleport: "&cYour dungeon progress has been reset (teleport)."
+  progress-reset-world-exit: "&cYour dungeon progress has been reset (left world)."
 
 rooms:
   # region: kills (order = registration order)
   # room1: 10
   # room2: 15
 ```
-
----
-
-## How It Works
-
-1. **Register rooms** with `/dg add <region> <kills>` (order = registration order)
-2. **Players kill MythicMobs** in the WorldGuard region
-3. **On region entry**, plugin checks if previous room is complete
-4. **If not complete** → deny entry + configured action (velocity/teleport/cancel/knockback)
-
-**Kill counts only if:**
-- Entity is a valid MythicMob (via MythicMobs API)
-- Player gets kill credit
-- Kill happens inside the registered region
-
----
-
-## Failed Entry Actions
-
-| Action | Behavior |
-|--------|----------|
-| **VELOCITY** | Launch backward (configurable force) |
-| **TELEPORT** | Teleport to previous room center |
-| **CANCEL** | Block movement at boundary |
-| **KNOCKBACK** | Apply knockback toward previous room |
 
 ---
 
@@ -152,7 +168,7 @@ cd DungeonGates
 # Output: build/libs/DungeonGates-1.0.0.jar
 ```
 
-Requires JDK 21. Only dependency: `paper-api` (WorldGuard/MythicMobs via reflection).
+Requires JDK 21. Only dependency: `paper-api` (WorldGuard/MythicMobs via reflection at runtime).
 
 ---
 

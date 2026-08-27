@@ -36,7 +36,12 @@ public final class MythicMobsHook {
     
     public boolean initialize() {
         if (Bukkit.getPluginManager().getPlugin("MythicMobs") == null) {
-            plugin.getLogger().warning("MythicMobs not found! Kill tracking disabled.");
+            plugin.getLogger().severe("MythicMobs not found! This plugin requires MythicMobs 5.6+");
+            return false;
+        }
+        
+        if (!isMythicMobsInstalled()) {
+            plugin.getLogger().severe("MythicMobs API not available!");
             return false;
         }
         
@@ -54,20 +59,29 @@ public final class MythicMobsHook {
             getInternalNameMethod = Class.forName("io.lumine.mythic.api.mobs.MythicMob").getMethod("getInternalName");
             
             initialized = true;
-            plugin.getLogger().info("MythicMobs hook initialized via reflection.");
+            plugin.getLogger().info("MythicMobs hook initialized via reflection (official API).");
             return true;
             
         } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "Failed to initialize MythicMobs hook", e);
+            plugin.getLogger().log(Level.SEVERE, "Failed to initialize MythicMobs hook via reflection", e);
             return false;
         }
     }
     
-    public boolean isAvailable() {
+    private boolean isMythicMobsInstalled() {
+        try {
+            Class.forName("io.lumine.mythic.bukkit.MythicBukkit");
+            return true;
+        } catch (ClassNotFoundException e) {
+            return false;
+        }
+    }
+    
+    public boolean isInitialized() {
         return initialized;
     }
     
-    public boolean isMythicMob(@NotNull Entity entity) {
+    public boolean isMythicMob(@NotNull org.bukkit.entity.Entity entity) {
         if (!initialized) return false;
         try {
             return (Boolean) isActiveMobMethod.invoke(mobManager, entity.getUniqueId());
@@ -77,17 +91,20 @@ public final class MythicMobsHook {
     }
     
     public boolean isMythicMob(@NotNull LivingEntity entity) {
-        return isMythicMob((Entity) entity);
+        return isMythicMob((org.bukkit.entity.Entity) entity);
     }
     
     @Nullable
-    public String getMythicMobType(@NotNull Entity entity) {
+    public String getMythicMobType(@NotNull org.bukkit.entity.Entity entity) {
         if (!isMythicMob(entity)) return null;
+        
         try {
             Object activeMob = getActiveMobMethod.invoke(mobManager, entity.getUniqueId());
             if (activeMob == null) return null;
+            
             Object mythicMob = getTypeMethod.invoke(activeMob);
             if (mythicMob == null) return null;
+            
             return (String) getInternalNameMethod.invoke(mythicMob);
         } catch (Exception e) {
             return null;
@@ -97,17 +114,17 @@ public final class MythicMobsHook {
     public boolean isValidKill(@NotNull EntityDeathEvent event) {
         if (!initialized) return false;
         
-        Entity entity = event.getEntity();
+        org.bukkit.entity.Entity entity = event.getEntity();
         if (!(entity instanceof LivingEntity)) return false;
         
         if (!isMythicMob(entity)) return false;
         
         LivingEntity livingEntity = (LivingEntity) entity;
         EntityDamageEvent lastDamage = livingEntity.getLastDamageCause();
-        if (lastDamage == null || !(lastDamage instanceof EntityDamageByEntityEvent)) return false;
+        if (lastDamage == null || !(lastDamage instanceof org.bukkit.event.entity.EntityDamageByEntityEvent)) return false;
         
-        EntityDamageByEntityEvent damageByEntity = (EntityDamageByEntityEvent) lastDamage;
-        Entity killer = damageByEntity.getDamager();
+        org.bukkit.event.entity.EntityDamageByEntityEvent damageByEntity = (org.bukkit.event.entity.EntityDamageByEntityEvent) lastDamage;
+        org.bukkit.entity.Entity killer = damageByEntity.getDamager();
         return killer instanceof Player;
     }
     
@@ -117,15 +134,15 @@ public final class MythicMobsHook {
     }
     
     public boolean isPlayerKillCredit(@NotNull EntityDeathEvent event, @NotNull Player player) {
-        Entity entity = event.getEntity();
+        org.bukkit.entity.Entity entity = event.getEntity();
         if (!(entity instanceof LivingEntity)) return false;
         
         LivingEntity livingEntity = (LivingEntity) entity;
         EntityDamageEvent lastDamage = livingEntity.getLastDamageCause();
-        if (lastDamage == null || !(lastDamage instanceof EntityDamageByEntityEvent)) return false;
+        if (lastDamage == null || !(lastDamage instanceof org.bukkit.event.entity.EntityDamageByEntityEvent)) return false;
         
-        EntityDamageByEntityEvent damageByEntity = (EntityDamageByEntityEvent) lastDamage;
-        Entity killer = damageByEntity.getDamager();
+        org.bukkit.event.entity.EntityDamageByEntityEvent damageByEntity = (org.bukkit.event.entity.EntityDamageByEntityEvent) lastDamage;
+        org.bukkit.entity.Entity killer = damageByEntity.getDamager();
         return killer != null && killer.equals(player);
     }
 }

@@ -45,7 +45,7 @@ public final class WorldGuardHook {
     public boolean initialize() {
         Plugin wgPlugin = Bukkit.getPluginManager().getPlugin("WorldGuard");
         if (wgPlugin == null) {
-            plugin.getLogger().severe("WorldGuard not found!");
+            plugin.getLogger().severe("WorldGuard not found! This plugin requires WorldGuard 7.0+");
             return false;
         }
         
@@ -84,13 +84,17 @@ public final class WorldGuardHook {
             asBlockVectorMethod = bukkitAdapterClass.getMethod("asBlockVector", Location.class);
             
             initialized = true;
-            plugin.getLogger().info("WorldGuard hook initialized via reflection.");
+            plugin.getLogger().info("WorldGuard hook initialized via reflection (official API).");
             return true;
             
         } catch (Exception e) {
-            plugin.getLogger().log(Level.SEVERE, "Failed to initialize WorldGuard hook", e);
+            plugin.getLogger().log(Level.SEVERE, "Failed to initialize WorldGuard hook via reflection", e);
             return false;
         }
+    }
+    
+    public boolean isInitialized() {
+        return initialized;
     }
     
     public @Nullable Object getRegion(@NotNull String regionName) {
@@ -103,7 +107,9 @@ public final class WorldGuardHook {
                 if (manager == null) continue;
                 
                 Object region = getRegionMethod.invoke(manager, regionName);
-                if (region != null) return region;
+                if (region != null) {
+                    return region;
+                }
             }
         } catch (Exception e) {
             plugin.getLogger().log(Level.WARNING, "Error getting region: " + regionName, e);
@@ -131,7 +137,7 @@ public final class WorldGuardHook {
             if (regions == null || regions.isEmpty()) return null;
             
             // Find region with smallest area (most specific)
-            Object bestRegion = null;
+            Object best = null;
             int minArea = Integer.MAX_VALUE;
             
             for (Object region : regions) {
@@ -140,12 +146,12 @@ public final class WorldGuardHook {
                 int area = calculateArea(minPoint, maxPoint);
                 if (area < minArea) {
                     minArea = area;
-                    bestRegion = region;
+                    best = region;
                 }
             }
             
-            if (bestRegion != null) {
-                return (String) getIdMethod.invoke(bestRegion);
+            if (best != null) {
+                return (String) getIdMethod.invoke(best);
             }
         } catch (Exception e) {
             plugin.getLogger().log(Level.WARNING, "Error getting region at location", e);

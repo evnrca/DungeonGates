@@ -20,16 +20,27 @@ public final class ConfigManager {
     private FileConfiguration config;
     private File configFile;
     
-    // Settings
-    private String failedEntryAction = "VELOCITY";
+    // Failed entry settings
+    private String failedEntryAction = "CANCEL";
     private double velocityHorizontal = 1.5;
     private double velocityVertical = 0.4;
     
+    // Denial settings
+    private String deniedTitle = "&c&lROOM LOCKED!";
+    private String deniedSubtitle = "&7Kill &e{remaining} &7more MythicMobs to proceed.";
+    private String deniedSound = "ENTITY_VILLAGER_NO";
+    private float deniedSoundVolume = 1.0f;
+    private float deniedSoundPitch = 1.0f;
+    
     // Messages
-    private String msgRequirementNotMet = "&cYou need {remaining} more MythicMob kills!";
-    private String msgProgress = "&eProgress: {current}/{required}";
-    private String msgCompleted = "&aRoom requirement completed!";
+    private String msgRequirementNotMet = "&cYou need {remaining} more MythicMob kills to enter {region}!";
+    private String msgProgress = "&eProgress: {current}/{required} MythicMobs killed";
+    private String msgCompleted = "&aRoom &e{region} &acompleted! You may now proceed.";
     private String msgPrefix = "&8[&6Dungeon Gates&8] ";
+    private String msgProgressResetDeath = "&cYou died! Your dungeon progress has been reset.";
+    private String msgProgressResetLogout = "&cYour dungeon progress has been reset (logout).";
+    private String msgProgressResetTeleport = "&cYour dungeon progress has been reset (teleport).";
+    private String msgProgressResetWorldExit = "&cYour dungeon progress has been reset (left world).";
     
     public ConfigManager(@NotNull JavaPlugin plugin) {
         this.plugin = plugin;
@@ -61,16 +72,27 @@ public final class ConfigManager {
     
     private void parseConfig() {
         // Failed entry
-        failedEntryAction = config.getString("failed-entry.action", "VELOCITY").toUpperCase();
+        failedEntryAction = config.getString("denial.action", "CANCEL").toUpperCase();
         
-        velocityHorizontal = config.getDouble("failed-entry.velocity.horizontal", 1.5);
-        velocityVertical = config.getDouble("failed-entry.velocity.vertical", 0.4);
+        velocityHorizontal = config.getDouble("denial.velocity.horizontal", 1.5);
+        velocityVertical = config.getDouble("denial.velocity.vertical", 0.4);
+        
+        // Denial settings
+        deniedTitle = config.getString("denial.title", deniedTitle);
+        deniedSubtitle = config.getString("denial.subtitle", deniedSubtitle);
+        deniedSound = config.getString("denial.sound", deniedSound);
+        deniedSoundVolume = (float) config.getDouble("denial.sound-volume", 1.0);
+        deniedSoundPitch = (float) config.getDouble("denial.sound-pitch", 1.0);
         
         // Messages
         msgRequirementNotMet = config.getString("messages.requirement-not-met", msgRequirementNotMet);
         msgProgress = config.getString("messages.progress", msgProgress);
         msgCompleted = config.getString("messages.completed", msgCompleted);
         msgPrefix = config.getString("messages.prefix", msgPrefix);
+        msgProgressResetDeath = config.getString("messages.progress-reset-death", msgProgressResetDeath);
+        msgProgressResetLogout = config.getString("messages.progress-reset-logout", msgProgressResetLogout);
+        msgProgressResetTeleport = config.getString("messages.progress-reset-teleport", msgProgressResetTeleport);
+        msgProgressResetWorldExit = config.getString("messages.progress-reset-world-exit", msgProgressResetWorldExit);
     }
     
     public void save() {
@@ -127,12 +149,39 @@ public final class ConfigManager {
         return velocityVertical;
     }
     
+    public @NotNull String getDeniedTitle() {
+        return deniedTitle;
+    }
+    
+    public @NotNull String getDeniedSubtitle() {
+        return deniedSubtitle;
+    }
+    
+    public @NotNull String getDeniedSound() {
+        return deniedSound;
+    }
+    
+    public float getDeniedSoundVolume() {
+        return deniedSoundVolume;
+    }
+    
+    public float getDeniedSoundPitch() {
+        return deniedSoundPitch;
+    }
+    
     public @NotNull String getMessage(@NotNull String key) {
         return switch (key) {
             case "requirement-not-met" -> msgRequirementNotMet;
             case "progress" -> msgProgress;
             case "completed" -> msgCompleted;
             case "prefix" -> msgPrefix;
+            case "progress-reset-death" -> msgProgressResetDeath;
+            case "progress-reset-logout" -> msgProgressResetLogout;
+            case "progress-reset-teleport" -> msgProgressResetTeleport;
+            case "progress-reset-world-exit" -> msgProgressResetWorldExit;
+            case "denied-title" -> deniedTitle;
+            case "denied-subtitle" -> deniedSubtitle;
+            case "denied-sound" -> deniedSound;
             default -> "Missing message: " + key;
         };
     }

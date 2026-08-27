@@ -1,24 +1,35 @@
 # DungeonGates Configuration
 
-# Action when player tries to enter next room without completing current
-# VELOCITY, TELEPORT, CANCEL, KNOCKBACK
-failed-entry:
-  action: VELOCITY
+# Action when player is denied entry to next room
+# CANCEL - block movement, send title/message, teleport back (recommended)
+# VELOCITY - push back with velocity
+# TELEPORT - teleport back
+# KNOCKBACK - apply knockback
+denial:
+  action: CANCEL
   velocity:
     horizontal: 1.5
     vertical: 0.4
+  title: "&c&lROOM LOCKED!"
+  subtitle: "&7Kill &e{remaining} &7more MythicMobs to proceed."
+  sound: "ENTITY_VILLAGER_NO"
+  sound-volume: 1.0
+  sound-pitch: 1.0
 
 messages:
   prefix: "&8[&6Dungeon Gates&8] "
-  requirement-not-met: "&cYou need {remaining} more MythicMob kills!"
-  progress: "&eProgress: {current}/{required}"
-  completed: "&aRoom requirement completed!"
+  requirement-not-met: "&cYou need {remaining} more MythicMob kills to enter {region}!"
+  progress: "&eProgress: {current}/{required} MythicMobs killed"
+  completed: "&aRoom &e{region} &acompleted! You may now proceed."
+  progress-reset-death: "&cYou died! Your dungeon progress has been reset."
+  progress-reset-logout: "&cYour dungeon progress has been reset (logout)."
+  progress-reset-teleport: "&cYour dungeon progress has been reset (teleport)."
+  progress-reset-world-exit: "&cYour dungeon progress has been reset (left world)."
 
 # Dungeon rooms
 # Format: region: kills
-# Order determines progression: first = first room
+# Order determines progression: first registered = first room
 rooms:
-  # Example:
   # room1: 10
   # room2: 15
   # room3: 20

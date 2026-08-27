@@ -10,9 +10,6 @@ depend:
   - WorldGuard
   - MythicMobs
 
-softdepend:
-  - PlaceholderAPI
-
 commands:
   dg:
     description: Main DungeonGates command

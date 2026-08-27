@@ -18,8 +18,11 @@ repositories {
 }
 
 dependencies {
-    // Only Paper API - everything else via reflection
+    // Paper API (only compile-time dependency)
     compileOnly("io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT")
+    
+    // WorldGuard & MythicMobs - use reflection (APIs not in public Maven repos)
+    // These are required at runtime via plugin.yml 'depend'
     
     // SnakeYAML - shaded into final JAR
     implementation("org.yaml:snakeyaml:2.3")
@@ -40,8 +43,7 @@ tasks.shadowJar {
             "Plugin-Version" to project.version.toString(),
             "Plugin-Main" to "com.dungeongates.DungeonGatesPlugin",
             "Plugin-API-Version" to "1.21",
-            "Plugin-Depend" to "WorldGuard, MythicMobs",
-            "Plugin-SoftDepend" to "PlaceholderAPI"
+            "Plugin-Depend" to "WorldGuard, MythicMobs"
         )
     }
     mergeServiceFiles()
@@ -55,8 +57,7 @@ tasks.jar {
             "Plugin-Version" to project.version.toString(),
             "Plugin-Main" to "com.dungeongates.DungeonGatesPlugin",
             "Plugin-API-Version" to "1.21",
-            "Plugin-Depend" to "WorldGuard, MythicMobs",
-            "Plugin-SoftDepend" to "PlaceholderAPI"
+            "Plugin-Depend" to "WorldGuard, MythicMobs"
         )
     }
 }

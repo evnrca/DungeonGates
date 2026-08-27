@@ -5,6 +5,8 @@ import com.dungeongates.hooks.WorldGuardHook;
 import com.dungeongates.hooks.MythicMobsHook;
 import com.dungeongates.listeners.PlayerMovementListener;
 import com.dungeongates.listeners.MythicMobKillListener;
+import com.dungeongates.listeners.PlayerDeathListener;
+import com.dungeongates.listeners.PlayerQuitListener;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
@@ -40,7 +42,9 @@ public final class DungeonGatesPlugin extends JavaPlugin {
         
         mythicMobsHook = new MythicMobsHook(this);
         if (!mythicMobsHook.initialize()) {
-            getLogger().warning("MythicMobs hook failed! Kill tracking disabled.");
+            getLogger().severe("MythicMobs hook failed! Disabling plugin.");
+            Bukkit.getPluginManager().disablePlugin(this);
+            return;
         }
         
         // Initialize managers
@@ -58,6 +62,8 @@ public final class DungeonGatesPlugin extends JavaPlugin {
         // Register listeners
         Bukkit.getPluginManager().registerEvents(new PlayerMovementListener(this), this);
         Bukkit.getPluginManager().registerEvents(new MythicMobKillListener(this), this);
+        Bukkit.getPluginManager().registerEvents(new PlayerDeathListener(this), this);
+        Bukkit.getPluginManager().registerEvents(new PlayerQuitListener(this), this);
         
         getLogger().info("DungeonGates v" + getPluginMeta().getVersion() + " enabled!");
         getLogger().info("Loaded " + roomManager.getRoomCount() + " dungeon room(s).");
