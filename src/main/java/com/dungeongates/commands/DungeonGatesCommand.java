@@ -213,7 +213,7 @@ public final class DungeonGatesCommand implements CommandExecutor, TabCompleter 
         if (currentRegion == null) {
             sender.sendMessage(colorize(prefix + "&eNot in a dungeon room."));
         } else {
-            Room room = roomManager.getRoom(currentRegion);
+            Room room = roomManager.getRoomByUniqueKey(currentRegion);
             RoomProgress roomProgress = progress.getRoomProgress(currentRegion);
             
             int current = roomProgress != null ? roomProgress.getKills() : 0;

@@ -134,7 +134,9 @@ public final class PlayerMovementListener implements Listener {
         // If teleporting from a dungeon region to outside, check exit requirements
         if (fromRegion != null && roomManager.isRegisteredRegion(fromRegion, fromWorld)) {
             if (toRegion == null || !roomManager.isRegisteredRegion(toRegion, toWorld)) {
-                handleTeleportExit(player, fromWorld, fromRegion, event);
+                // Teleporting OUT of dungeon - allow but reset progress (safe exit like /spawn)
+                handleSafeTeleportExit(player, fromWorld, fromRegion);
+                // Don't cancel the teleport - allow it to proceed
             }
         }
     }
@@ -199,28 +201,27 @@ public final class PlayerMovementListener implements Listener {
     }
     
     /**
-     * Handle teleport exit from dungeon region.
+     * Handle safe teleport exit (like /spawn, /home, etc.)
+     * Allows the teleport but resets progress.
      */
-    private void handleTeleportExit(@NotNull Player player, @NotNull String fromWorld, @NotNull String fromRegion, 
-                                     @NotNull PlayerTeleportEvent event) {
-        // Admin bypass
-        if (player.hasPermission("dungeongates.bypass")) return;
-        
+    private void handleSafeTeleportExit(@NotNull Player player, @NotNull String fromWorld, @NotNull String fromRegion) {
         Room fromRoom = roomManager.getRoom(fromRegion, fromWorld);
         if (fromRoom == null) return;
         
-        // First room - always allow
-        if (fromRoom.getOrder() == 0) return;
+        // Admin bypass - don't reset
+        if (player.hasPermission("dungeongates.bypass")) return;
         
-        // Check completion - USE SYNC LOAD
-        DatabaseManager.RoomProgressData data = progressManager.getDatabaseManager().loadRoomProgressSync(player.getUniqueId(), fromRoom.getUniqueKey());
-        boolean completed = data != null && data.completed;
+        debug(player, "Safe teleport exit from " + fromRoom.getUniqueKey() + " - resetting progress");
         
-        if (completed) return;
+        // Send message
+        String msg = plugin.getConfigManager().getPrefixedMessage("progress-reset-teleport");
+        if (msg != null) {
+            player.sendMessage(colorize(msg));
+        }
         
-        // Not completed - cancel teleport and knockback
-        event.setCancelled(true);
-        handleFailedExit(player, fromRoom, event.getFrom());
+        // Clear all progress
+        progressManager.resetProgressSync(player.getUniqueId());
+        lastKnownRegion.remove(player.getUniqueId());
     }
     
     /**
