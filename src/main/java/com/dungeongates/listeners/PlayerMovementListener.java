@@ -19,6 +19,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class PlayerMovementListener implements Listener {
     
@@ -27,8 +28,8 @@ public final class PlayerMovementListener implements Listener {
     private final RoomManager roomManager;
     private final WorldGuardHook worldGuardHook;
     
-    // Cache player's last known region
-    private final Map<UUID, String> lastKnownRegion = new java.util.concurrent.ConcurrentHashMap<>();
+    // Cache player's last known dungeon region
+    private final Map<UUID, String> lastKnownRegion = new ConcurrentHashMap<>();
     
     public PlayerMovementListener(@NotNull DungeonGatesPlugin plugin) {
         this.plugin = plugin;
@@ -48,8 +49,13 @@ public final class PlayerMovementListener implements Listener {
             return;
         }
         
-        // Get current region
+        // Quick check: is player in any dungeon region?
         String currentRegion = worldGuardHook.getRegionAt(player.getLocation());
+        if (currentRegion == null && !lastKnownRegion.containsKey(player.getUniqueId())) {
+            // Player not in dungeon region and wasn't in one - skip
+            return;
+        }
+        
         String lastRegion = lastKnownRegion.get(player.getUniqueId());
         
         // Update progress manager
@@ -58,11 +64,16 @@ public final class PlayerMovementListener implements Listener {
         // Player entered a new dungeon region
         if (currentRegion != null && !currentRegion.equals(lastRegion)) {
             handleRegionEntry(player, currentRegion, lastRegion, event.getFrom());
-        } else if (currentRegion == null && lastRegion != null) {
-            // Player left all dungeon regions
+        } 
+        // Player left all dungeon regions
+        else if (currentRegion == null && lastRegion != null) {
+            lastKnownRegion.remove(player.getUniqueId());
         }
         
-        lastKnownRegion.put(player.getUniqueId(), currentRegion);
+        // Update cache (only non-null regions)
+        if (currentRegion != null) {
+            lastKnownRegion.put(player.getUniqueId(), currentRegion);
+        }
     }
     
     private void handleRegionEntry(@NotNull Player player, @NotNull String newRegion, 
