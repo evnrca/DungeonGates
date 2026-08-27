@@ -127,18 +127,6 @@ public final class PlayerMovementListener implements Listener {
         Room previousRoom = (previousRegion != null && previousWorld != null) 
             ? roomManager.getRoom(previousRegion, previousWorld) : null;
         
-        // Allow entry if coming from a completed room (not necessarily the immediate previous)
-        if (previousRoom != null) {
-            PlayerProgress progress = progressManager.getProgress(player.getUniqueId());
-            RoomProgress prevProgress = progress.getRoomProgress(previousRoom.getRegion());
-            
-            // If previous room is completed, allow entry
-            if (prevProgress != null && prevProgress.isCompleted()) {
-                updateLastValidLocation(player, newRoom);
-                sendProgressMessage(player, newRoom);
-                return;
-}
-        
         // Check if entering the immediate next room in sequence
         if (previousRoom != null && roomManager.getNextRoom(previousRegion, previousWorld) == newRoom) {
             // Player trying to progress to next room - check requirements
@@ -152,7 +140,6 @@ public final class PlayerMovementListener implements Listener {
             updateLastValidLocation(player, newRoom);
             sendProgressMessage(player, newRoom);
             return;
-        }
         }
         
         // Allow entry to any other room (e.g., returning to previous rooms, or non-sequential)
