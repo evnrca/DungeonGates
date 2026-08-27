@@ -85,8 +85,8 @@ public final class WorldGuardHook {
     public @Nullable String getRegionAt(@NotNull Location location) {
         if (!initialized) return null;
         
-        // Convert Location to BlockVector3 manually
-        BlockVector3 blockVector = new BlockVector3(
+        // Convert Location to BlockVector3 manually using static factory method
+        BlockVector3 blockVector = BlockVector3.at(
             (int) location.getX(),
             (int) location.getY(),
             (int) location.getZ()
