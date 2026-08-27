@@ -48,6 +48,7 @@ public final class DungeonGatesCommand implements CommandExecutor, TabCompleter 
             case "reset" -> handleReset(sender, args);
             case "reload" -> handleReload(sender);
             case "debug" -> handleDebug(sender, args);
+            case "info" -> handleInfo(sender);
             default -> {
                 sendHelp(sender);
                 yield true;
@@ -67,6 +68,7 @@ public final class DungeonGatesCommand implements CommandExecutor, TabCompleter 
         sender.sendMessage(colorize("&e/dg reset <player> [world] [region] &7- Reset progress"));
         sender.sendMessage(colorize("&e/dg reload &7- Reload config"));
         sender.sendMessage(colorize("&e/dg debug [on|off] &7- Toggle debug mode"));
+        sender.sendMessage(colorize("&e/dg info &7- Show plugin info"));
     }
     
     private boolean handleAdd(@NotNull CommandSender sender, @NotNull String[] args) {
@@ -293,6 +295,17 @@ public final class DungeonGatesCommand implements CommandExecutor, TabCompleter 
         
         plugin.reload();
         sender.sendMessage(colorize("&aConfiguration reloaded."));
+        return true;
+    }
+    
+    private boolean handleInfo(@NotNull CommandSender sender) {
+        String prefix = plugin.getConfigManager().getMessage("prefix");
+        sender.sendMessage(colorize(prefix + "&6=== &eDungeon Gates Info &6==="));
+        sender.sendMessage(colorize(prefix + "&eVersion: &f" + plugin.getPluginMeta().getVersion()));
+        sender.sendMessage(colorize(prefix + "&eAuthor: &fevnrca"));
+        sender.sendMessage(colorize(prefix + "&eRepository: &fhttps://github.com/evnrca/DungeonGates"));
+        sender.sendMessage(colorize(prefix + "&eDependencies: &fWorldGuard 7+, MythicMobs 5.6+, Paper 1.21+"));
+        sender.sendMessage(colorize(prefix + "&6============================="));
         return true;
     }
     

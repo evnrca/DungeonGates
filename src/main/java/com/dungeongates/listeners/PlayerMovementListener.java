@@ -164,6 +164,12 @@ public final class PlayerMovementListener implements Listener {
                                     @NotNull Location fromLocation) {
         if (fromRegion == null || fromWorld == null) return;
         
+        // Admin bypass
+        if (player.hasPermission("dungeongates.bypass")) {
+            debug(player, "Admin bypass - allowing exit");
+            return;
+        }
+        
         Room fromRoom = roomManager.getRoom(fromRegion, fromWorld);
         if (fromRoom == null) return; // Not a dungeon room
         
@@ -194,6 +200,9 @@ public final class PlayerMovementListener implements Listener {
      */
     private void handleTeleportExit(@NotNull Player player, @NotNull String fromWorld, @NotNull String fromRegion, 
                                      @NotNull PlayerTeleportEvent event) {
+        // Admin bypass
+        if (player.hasPermission("dungeongates.bypass")) return;
+        
         Room fromRoom = roomManager.getRoom(fromRegion, fromWorld);
         if (fromRoom == null) return;
         
@@ -213,10 +222,17 @@ public final class PlayerMovementListener implements Listener {
     
     /**
      * Handle player ENTERING a dungeon region.
-     * First room always allowed. Next rooms require previous completion.
+     * First room always allowed. Second+ rooms require previous room completion.
+     * This prevents skipping rooms.
      */
     private void handleRegionEntry(@NotNull Player player, @NotNull String currentWorld, @NotNull String currentRegion, 
                                     @NotNull Location fromLocation) {
+        // Admin bypass
+        if (player.hasPermission("dungeongates.bypass")) {
+            debug(player, "Admin bypass - allowing entry");
+            return;
+        }
+        
         Room newRoom = roomManager.getRoom(currentRegion, currentWorld);
         if (newRoom == null) return;
         
@@ -226,9 +242,62 @@ public final class PlayerMovementListener implements Listener {
             return;
         }
         
-        // For entry to next rooms, we rely on the exit check from the previous room
-        // Just show progress
+        // Check if previous room is completed
+        Room previousRoom = roomManager.getPreviousRoom(currentRegion, currentWorld);
+        if (previousRoom != null) {
+            PlayerProgress progress = progressManager.getProgress(player.getUniqueId());
+            RoomProgress prevProgress = progress.getRoomProgress(previousRoom.getUniqueKey());
+            
+            if (prevProgress == null || !prevProgress.isCompleted()) {
+                // Previous room not completed - DENY ENTRY
+                debug(player, "Previous room not completed - denying entry to " + newRoom.getUniqueKey());
+                handleFailedEntry(player, previousRoom, newRoom, fromLocation);
+                return;
+            }
+        }
+        
+        // Previous room completed - allow entry
         sendProgressMessage(player, newRoom);
+    }
+    
+    private void handleFailedEntry(@NotNull Player player, @NotNull Room fromRoom, 
+                                    @NotNull Room toRoom, @NotNull Location fromLocation) {
+        PlayerProgress progress = progressManager.getProgress(player.getUniqueId());
+        RoomProgress fromProgress = progress.getRoomProgress(fromRoom.getUniqueKey());
+        
+        int currentKills = fromProgress != null ? fromProgress.getKills() : 0;
+        int requiredKills = fromRoom.getRequiredKills();
+        int remaining = Math.max(0, requiredKills - currentKills);
+        
+        // Send title message (screen title + subtitle)
+        String title = plugin.getConfigManager().getMessage("denied-title");
+        String subtitle = plugin.getConfigManager().getMessage("denied-subtitle");
+        title = title.replace("{remaining}", String.valueOf(remaining))
+                     .replace("{region}", fromRoom.getRegion());
+        subtitle = subtitle.replace("{remaining}", String.valueOf(remaining))
+                           .replace("{region}", fromRoom.getRegion());
+        
+        player.sendTitle(colorize(title), colorize(subtitle), 10, 70, 20);
+        
+        // Play sound
+        String soundName = plugin.getConfigManager().getMessage("denied-sound");
+        float volume = plugin.getConfigManager().getDeniedSoundVolume();
+        float pitch = plugin.getConfigManager().getDeniedSoundPitch();
+        try {
+            Sound sound = Sound.valueOf(soundName);
+            player.playSound(player.getLocation(), sound, volume, pitch);
+        } catch (IllegalArgumentException e) {
+            plugin.getLogger().warning("Invalid sound in config: " + soundName);
+        }
+        
+        // Send chat message
+        String msg = plugin.getConfigManager().getPrefixedMessage("requirement-not-met");
+        msg = msg.replace("{remaining}", String.valueOf(remaining))
+                 .replace("{region}", fromRoom.getRegion());
+        player.sendMessage(colorize(msg));
+        
+        // Knockback player back to previous room
+        knockbackPlayer(player, fromLocation);
     }
     
     private void handleFailedExit(@NotNull Player player, @NotNull Room fromRoom, @NotNull Location fromLocation) {
