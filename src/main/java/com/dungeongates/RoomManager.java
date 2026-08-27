@@ -1,5 +1,6 @@
 package com.dungeongates;
 
+import org.bukkit.Bukkit;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -10,7 +11,7 @@ import java.util.logging.Level;
 public final class RoomManager {
     
     private final DungeonGatesPlugin plugin;
-    private final Map<String, Room> rooms = new ConcurrentHashMap<>();
+    private final Map<String, Room> rooms = new ConcurrentHashMap<>(); // key = world:region
     private final List<Room> orderedRooms = new ArrayList<>();
     
     public RoomManager(@NotNull DungeonGatesPlugin plugin) {
@@ -26,8 +27,19 @@ public final class RoomManager {
         
         int order = 0;
         for (Map.Entry<String, Object> entry : roomsConfig.entrySet()) {
-            String region = entry.getKey();
+            String key = entry.getKey(); // format: world:region or just region (legacy)
             Object value = entry.getValue();
+            
+            String world, region;
+            if (key.contains(":")) {
+                String[] parts = key.split(":", 2);
+                world = parts[0];
+                region = parts[1];
+            } else {
+                // Legacy format - assume main world
+                world = "world";
+                region = key;
+            }
             
             int requiredKills = 10;
             if (value instanceof Number) {
@@ -41,44 +53,56 @@ public final class RoomManager {
             
             if (requiredKills < 1) requiredKills = 1;
             
-            Room room = new Room(region, requiredKills);
+            Room room = new Room(region, world, requiredKills);
             room.setOrder(order++);
-            rooms.put(region, room);
+            rooms.put(room.getUniqueKey(), room);
             orderedRooms.add(room);
         }
         
         // Validate regions exist
         for (Room room : rooms.values()) {
-            if (!plugin.getWorldGuardHook().regionExists(room.getRegion())) {
-                plugin.getLogger().warning("WorldGuard region '" + room.getRegion() + "' does not exist!");
+            if (!plugin.getWorldGuardHook().regionExists(room.getRegion(), room.getWorld())) {
+                plugin.getLogger().warning("WorldGuard region '" + room.getRegion() + "' in world '" + room.getWorld() + "' does not exist!");
             }
         }
         
         plugin.getLogger().info("Loaded " + rooms.size() + " dungeon room(s).");
     }
     
-    public boolean addRoom(@NotNull String region, int requiredKills) {
-        if (rooms.containsKey(region)) return false;
-        if (!plugin.getWorldGuardHook().regionExists(region)) return false;
+    public boolean addRoom(@NotNull String region, @NotNull String world, int requiredKills) {
+        String key = world + ":" + region;
+        if (rooms.containsKey(key)) return false;
+        if (!plugin.getWorldGuardHook().regionExists(region, world)) return false;
         if (requiredKills < 1) return false;
         
-        Room room = new Room(region, requiredKills);
+        Room room = new Room(region, world, requiredKills);
         room.setOrder(rooms.size());
-        rooms.put(region, room);
+        rooms.put(key, room);
         orderedRooms.add(room);
         
-        plugin.getConfigManager().saveRoom(region, requiredKills, room.getOrder());
+        plugin.getConfigManager().saveRoom(world, region, requiredKills, room.getOrder());
         return true;
     }
     
-    public boolean removeRoom(@NotNull String region) {
-        Room room = rooms.remove(region);
+    // Legacy method for backwards compatibility
+    public boolean addRoom(@NotNull String region, int requiredKills) {
+        return addRoom(region, "world", requiredKills);
+    }
+    
+    public boolean removeRoom(@NotNull String region, @NotNull String world) {
+        String key = world + ":" + region;
+        Room room = rooms.remove(key);
         if (room == null) return false;
         
         orderedRooms.remove(room);
-        plugin.getConfigManager().removeRoom(region);
+        plugin.getConfigManager().removeRoom(world, region);
         reorder();
         return true;
+    }
+    
+    // Legacy method
+    public boolean removeRoom(@NotNull String region) {
+        return removeRoom(region, "world");
     }
     
     private void reorder() {
@@ -88,43 +112,100 @@ public final class RoomManager {
         plugin.getConfigManager().saveRooms(orderedRooms);
     }
     
-    public @Nullable Room getRoom(@NotNull String region) {
-        return rooms.get(region);
+    public @Nullable Room getRoom(@NotNull String region, @NotNull String world) {
+        return rooms.get(world + ":" + region);
     }
     
-    public @Nullable Room getNextRoom(@NotNull String currentRegion) {
-        Room current = rooms.get(currentRegion);
+    public @Nullable Room getRoomByUniqueKey(@NotNull String uniqueKey) {
+        return rooms.get(uniqueKey);
+    }
+    
+    // Legacy method
+    public @Nullable Room getRoom(@NotNull String region) {
+        // Try exact match first, then fallback to any world
+        for (Room room : rooms.values()) {
+            if (room.getRegion().equals(region)) return room;
+        }
+        return null;
+    }
+    
+    public @Nullable Room getNextRoom(@NotNull String currentRegion, @NotNull String world) {
+        Room current = getRoom(currentRegion, world);
         if (current == null) return null;
         
         int currentOrder = current.getOrder();
         if (currentOrder + 1 >= orderedRooms.size()) return null;
         
-        return orderedRooms.get(currentOrder + 1);
+        // Find next room in same world
+        for (Room room : orderedRooms) {
+            if (room.getOrder() == currentOrder + 1 && room.getWorld().equals(world)) {
+                return room;
+            }
+        }
+        return null;
     }
     
-    public @Nullable Room getPreviousRoom(@NotNull String currentRegion) {
-        Room current = rooms.get(currentRegion);
+    public @Nullable Room getPreviousRoom(@NotNull String currentRegion, @NotNull String world) {
+        Room current = getRoom(currentRegion, world);
         if (current == null) return null;
         
         int currentOrder = current.getOrder();
         if (currentOrder == 0) return null;
         
-        return orderedRooms.get(currentOrder - 1);
+        // Find previous room in same world
+        for (Room room : orderedRooms) {
+            if (room.getOrder() == currentOrder - 1 && room.getWorld().equals(world)) {
+                return room;
+            }
+        }
+        return null;
     }
     
     public @NotNull List<Room> getAllRooms() {
         return new ArrayList<>(orderedRooms);
     }
     
+    public @NotNull List<Room> getRoomsInWorld(@NotNull String world) {
+        List<Room> result = new ArrayList<>();
+        for (Room room : orderedRooms) {
+            if (room.getWorld().equals(world)) {
+                result.add(room);
+            }
+        }
+        return result;
+    }
+    
     public int getRoomCount() {
         return rooms.size();
     }
     
+    public boolean isRegisteredRegion(@NotNull String region, @NotNull String world) {
+        return rooms.containsKey(world + ":" + region);
+    }
+    
+    // Legacy method
     public boolean isRegisteredRegion(@NotNull String region) {
-        return rooms.containsKey(region);
+        for (Room room : rooms.values()) {
+            if (room.getRegion().equals(region)) return true;
+        }
+        return false;
     }
     
     public @NotNull Collection<String> getRegionNames() {
-        return rooms.keySet();
+        Set<String> names = new HashSet<>();
+        for (Room room : rooms.values()) {
+            names.add(room.getRegion());
+        }
+        return names;
+    }
+    
+    public @NotNull Collection<String> getRegionNamesInWorld(@NotNull String world) {
+        Set<String> names = new HashSet<>();
+        for (Room room : rooms.values()) {
+            if (room.getWorld().equals(world)) {
+                names.add(room.getRegion());
+            }
+        }
+        return names;
     }
 }

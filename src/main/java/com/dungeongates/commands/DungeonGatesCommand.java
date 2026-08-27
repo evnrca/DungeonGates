@@ -57,11 +57,13 @@ public final class DungeonGatesCommand implements CommandExecutor, TabCompleter 
     private void sendHelp(@NotNull CommandSender sender) {
         String prefix = plugin.getConfigManager().getMessage("prefix");
         sender.sendMessage(colorize(prefix + "&6Dungeon Gates Commands:"));
-        sender.sendMessage(colorize("&e/dg add <region> <kills> &7- Register a dungeon room"));
-        sender.sendMessage(colorize("&e/dg remove <region> &7- Remove a room"));
-        sender.sendMessage(colorize("&e/dg list &7- List all rooms"));
+        sender.sendMessage(colorize("&e/dg add <world> <region> <kills> &7- Register a dungeon room"));
+        sender.sendMessage(colorize("&e/dg add <region> <kills> &7- Register in 'world' (legacy)"));
+        sender.sendMessage(colorize("&e/dg remove <world> <region> &7- Remove a room"));
+        sender.sendMessage(colorize("&e/dg remove <region> &7- Remove from 'world' (legacy)"));
+        sender.sendMessage(colorize("&e/dg list [world] &7- List rooms (all or specific world)"));
         sender.sendMessage(colorize("&e/dg status [player] &7- Check progress"));
-        sender.sendMessage(colorize("&e/dg reset <player> [region] &7- Reset progress"));
+        sender.sendMessage(colorize("&e/dg reset <player> [world] [region] &7- Reset progress"));
         sender.sendMessage(colorize("&e/dg reload &7- Reload config"));
     }
     
@@ -71,18 +73,35 @@ public final class DungeonGatesCommand implements CommandExecutor, TabCompleter 
             return true;
         }
         
-        if (args.length < 3) {
-            sender.sendMessage(colorize("&cUsage: /dg add <region> <kills>"));
-            return true;
-        }
-        
-        String region = args[1];
+        // Support both: /dg add <region> <kills> (legacy) and /dg add <world> <region> <kills>
+        String world = "world";
+        String region;
         int requiredKills;
+        int regionArgIndex;
         
-        try {
-            requiredKills = Integer.parseInt(args[2]);
-        } catch (NumberFormatException e) {
-            sender.sendMessage(colorize("&cKills must be a positive number."));
+        if (args.length == 3) {
+            // Legacy: /dg add <region> <kills>
+            region = args[1];
+            regionArgIndex = 1;
+            try {
+                requiredKills = Integer.parseInt(args[2]);
+            } catch (NumberFormatException e) {
+                sender.sendMessage(colorize("&cKills must be a positive number."));
+                return true;
+            }
+        } else if (args.length == 4) {
+            // New: /dg add <world> <region> <kills>
+            world = args[1];
+            region = args[2];
+            regionArgIndex = 2;
+            try {
+                requiredKills = Integer.parseInt(args[3]);
+            } catch (NumberFormatException e) {
+                sender.sendMessage(colorize("&cKills must be a positive number."));
+                return true;
+            }
+        } else {
+            sender.sendMessage(colorize("&cUsage: /dg add <world> <region> <kills> or /dg add <region> <kills>"));
             return true;
         }
         
@@ -91,18 +110,18 @@ public final class DungeonGatesCommand implements CommandExecutor, TabCompleter 
             return true;
         }
         
-        if (roomManager.isRegisteredRegion(region)) {
-            sender.sendMessage(colorize("&cRegion '" + region + "' is already registered."));
+        if (roomManager.isRegisteredRegion(region, world)) {
+            sender.sendMessage(colorize("&cRegion '" + region + "' in world '" + world + "' is already registered."));
             return true;
         }
         
-        if (!plugin.getWorldGuardHook().regionExists(region)) {
-            sender.sendMessage(colorize("&cWorldGuard region '" + region + "' does not exist."));
+        if (!plugin.getWorldGuardHook().regionExists(region, world)) {
+            sender.sendMessage(colorize("&cWorldGuard region '" + region + "' does not exist in world '" + world + "'."));
             return true;
         }
         
-        if (roomManager.addRoom(region, requiredKills)) {
-            sender.sendMessage(colorize("&aRegistered room: &e" + region + " &awith &e" + requiredKills + " &aMythicMob kills."));
+        if (roomManager.addRoom(region, world, requiredKills)) {
+            sender.sendMessage(colorize("&aRegistered room: &e" + world + ":" + region + " &awith &e" + requiredKills + " &aMythicMob kills."));
         } else {
             sender.sendMessage(colorize("&cFailed to register room."));
         }
@@ -115,17 +134,25 @@ public final class DungeonGatesCommand implements CommandExecutor, TabCompleter 
             return true;
         }
         
-        if (args.length < 2) {
-            sender.sendMessage(colorize("&cUsage: /dg remove <region>"));
+        String world = "world";
+        String region;
+        
+        if (args.length == 2) {
+            // Legacy: /dg remove <region>
+            region = args[1];
+        } else if (args.length == 3) {
+            // New: /dg remove <world> <region>
+            world = args[1];
+            region = args[2];
+        } else {
+            sender.sendMessage(colorize("&cUsage: /dg remove <world> <region> or /dg remove <region>"));
             return true;
         }
         
-        String region = args[1];
-        
-        if (roomManager.removeRoom(region)) {
-            sender.sendMessage(colorize("&aRemoved room: &e" + region));
+        if (roomManager.removeRoom(region, world)) {
+            sender.sendMessage(colorize("&aRemoved room: &e" + world + ":" + region));
         } else {
-            sender.sendMessage(colorize("&cRoom '" + region + "' not found."));
+            sender.sendMessage(colorize("&cRoom '" + region + "' in world '" + world + "' not found."));
         }
         return true;
     }
@@ -140,7 +167,7 @@ public final class DungeonGatesCommand implements CommandExecutor, TabCompleter 
             sender.sendMessage(colorize(prefix + "&eNo rooms registered."));
         } else {
             for (Room room : rooms) {
-                sender.sendMessage(colorize(prefix + "&e" + (room.getOrder() + 1) + ". &f" + room.getRegion() + " &7- &e" + room.getRequiredKills() + " &7kills"));
+                sender.sendMessage(colorize(prefix + "&e" + (room.getOrder() + 1) + ". &f" + room.getWorld() + ":" + room.getRegion() + " &7- &e" + room.getRequiredKills() + " &7kills"));
             }
         }
         

@@ -97,18 +97,32 @@ public final class WorldGuardHook {
         return initialized;
     }
     
-    public @Nullable Object getRegion(@NotNull String regionName) {
+    public @Nullable Object getRegion(@NotNull String regionName, @Nullable String worldName) {
         if (!initialized) return null;
         
         try {
-            for (World world : Bukkit.getWorlds()) {
-                Object adapter = adaptMethod.invoke(null, world);
-                Object manager = getRegionManagerMethod.invoke(regionContainer, adapter);
-                if (manager == null) continue;
-                
-                Object region = getRegionMethod.invoke(manager, regionName);
-                if (region != null) {
-                    return region;
+            if (worldName != null) {
+                World world = Bukkit.getWorld(worldName);
+                if (world != null) {
+                    Object adapter = adaptMethod.invoke(null, world);
+                    Object manager = getRegionManagerMethod.invoke(regionContainer, adapter);
+                    if (manager != null) {
+                        Object region = getRegionMethod.invoke(manager, regionName);
+                        if (region != null) {
+                            return region;
+                        }
+                    }
+                }
+            } else {
+                for (World world : Bukkit.getWorlds()) {
+                    Object adapter = adaptMethod.invoke(null, world);
+                    Object manager = getRegionManagerMethod.invoke(regionContainer, adapter);
+                    if (manager == null) continue;
+                    
+                    Object region = getRegionMethod.invoke(manager, regionName);
+                    if (region != null) {
+                        return region;
+                    }
                 }
             }
         } catch (Exception e) {
@@ -118,7 +132,11 @@ public final class WorldGuardHook {
     }
     
     public boolean regionExists(@NotNull String regionName) {
-        return getRegion(regionName) != null;
+        return getRegion(regionName, null) != null;
+    }
+    
+    public boolean regionExists(@NotNull String regionName, @NotNull String worldName) {
+        return getRegion(regionName, worldName) != null;
     }
     
     public @Nullable String getRegionAt(@NotNull Location location) {
@@ -163,8 +181,8 @@ public final class WorldGuardHook {
         return getRegionAt(player.getLocation());
     }
     
-    public @Nullable Location getRegionCenter(@NotNull String regionName) {
-        Object region = getRegion(regionName);
+    public @Nullable Location getRegionCenter(@NotNull String regionName, @Nullable String worldName) {
+        Object region = getRegion(regionName, worldName);
         if (region == null) return null;
         
         try {
@@ -178,20 +196,32 @@ public final class WorldGuardHook {
             double z = getCoord(center, "getZ");
             
             // Find world containing this region
-            for (World world : Bukkit.getWorlds()) {
-                Object adapter = adaptMethod.invoke(null, world);
-                Object manager = getRegionManagerMethod.invoke(regionContainer, adapter);
-                if (manager == null) continue;
-                
-                Object found = getRegionMethod.invoke(manager, regionName);
-                if (found != null) {
+            if (worldName != null) {
+                World world = Bukkit.getWorld(worldName);
+                if (world != null) {
                     return new Location(world, x, y, z);
+                }
+            } else {
+                for (World world : Bukkit.getWorlds()) {
+                    Object adapter = adaptMethod.invoke(null, world);
+                    Object manager = getRegionManagerMethod.invoke(regionContainer, adapter);
+                    if (manager == null) continue;
+                    
+                    Object found = getRegionMethod.invoke(manager, regionName);
+                    if (found != null) {
+                        return new Location(world, x, y, z);
+                    }
                 }
             }
         } catch (Exception e) {
             plugin.getLogger().log(Level.WARNING, "Error getting region center", e);
         }
         return null;
+    }
+    
+    // Legacy method
+    public @Nullable Location getRegionCenter(@NotNull String regionName) {
+        return getRegionCenter(regionName, null);
     }
     
     public boolean isInsideRegion(@NotNull Location location, @NotNull String regionName) {

@@ -35,16 +35,18 @@ public final class MythicMobKillListener implements Listener {
         Player killer = event.getEntity().getKiller();
         if (killer == null) return;
         
-        // Get region where kill happened
+        // Get world and region where kill happened
+        String world = event.getEntity().getWorld().getName();
         String region = worldGuardHook.getRegionAt(event.getEntity().getLocation());
         if (region == null) return;
         
-        // Check if region is a dungeon room
-        if (!plugin.getRoomManager().isRegisteredRegion(region)) {
+        // Check if region is a dungeon room in that world
+        if (!plugin.getRoomManager().isRegisteredRegion(region, world)) {
             return;
         }
         
-        // Add kill to player's progress
-        progressManager.addKill(killer.getUniqueId(), region);
+        // Add kill to player's progress using unique key
+        String regionKey = world + ":" + region;
+        progressManager.addKill(killer.getUniqueId(), regionKey);
     }
 }

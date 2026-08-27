@@ -25,51 +25,53 @@ public final class ProgressManager {
         return progressMap.get(playerId);
     }
     
-    public void addKill(@NotNull UUID playerId, @NotNull String region) {
+    public void addKill(@NotNull UUID playerId, @NotNull String regionKey) {
         PlayerProgress progress = getProgress(playerId);
-        progress.addKill(region);
+        progress.addKill(regionKey);
         
         // Check for room completion
-        Room room = plugin.getRoomManager().getRoom(region);
+        Room room = plugin.getRoomManager().getRoomByUniqueKey(regionKey);
         if (room != null) {
-            RoomProgress roomProgress = progress.getRoomProgress(region);
+            RoomProgress roomProgress = progress.getRoomProgress(regionKey);
             if (roomProgress != null && roomProgress.getKills() >= room.getRequiredKills() && !roomProgress.isCompleted()) {
                 roomProgress.setCompleted(true);
-                sendCompletionMessage(playerId, region);
+                sendCompletionMessage(playerId, regionKey);
             }
         }
     }
     
-    private void sendCompletionMessage(@NotNull UUID playerId, @NotNull String region) {
+    private void sendCompletionMessage(@NotNull UUID playerId, @NotNull String regionKey) {
         Player player = Bukkit.getPlayer(playerId);
         if (player != null && player.isOnline()) {
+            Room room = plugin.getRoomManager().getRoomByUniqueKey(regionKey);
+            String regionName = room != null ? room.getRegion() : regionKey;
             String msg = plugin.getConfigManager().getMessage("completed");
-            msg = msg.replace("{region}", region);
+            msg = msg.replace("{region}", regionName);
             player.sendMessage(colorize(msg));
         }
     }
     
-    public boolean canEnterRoom(@NotNull UUID playerId, @NotNull String region) {
-        Room target = plugin.getRoomManager().getRoom(region);
+    public boolean canEnterRoom(@NotNull UUID playerId, @NotNull String regionKey) {
+        Room target = plugin.getRoomManager().getRoomByUniqueKey(regionKey);
         if (target == null) return true; // Not a dungeon room
         
         // First room is always accessible
         if (target.getOrder() == 0) return true;
         
         // Check previous room completion
-        Room previous = plugin.getRoomManager().getPreviousRoom(region);
+        Room previous = plugin.getRoomManager().getPreviousRoom(target.getRegion(), target.getWorld());
         if (previous == null) return true;
         
         PlayerProgress progress = getProgressIfExists(playerId);
         if (progress == null) return false;
         
-        RoomProgress prevProgress = progress.getRoomProgress(previous.getRegion());
+        RoomProgress prevProgress = progress.getRoomProgress(previous.getUniqueKey());
         return prevProgress != null && prevProgress.isCompleted();
     }
     
-    public void setCurrentRoom(@NotNull UUID playerId, @Nullable String region) {
+    public void setCurrentRoom(@NotNull UUID playerId, @Nullable String regionKey) {
         PlayerProgress progress = getProgress(playerId);
-        progress.setCurrentRoom(region);
+        progress.setCurrentRoom(regionKey);
     }
     
     public @Nullable String getCurrentRoom(@NotNull UUID playerId) {
@@ -81,10 +83,10 @@ public final class ProgressManager {
         progressMap.remove(playerId);
     }
     
-    public void resetProgress(@NotNull UUID playerId, @NotNull String region) {
+    public void resetProgress(@NotNull UUID playerId, @NotNull String regionKey) {
         PlayerProgress progress = progressMap.get(playerId);
         if (progress != null) {
-            progress.removeRoomProgress(region);
+            progress.removeRoomProgress(regionKey);
         }
     }
     

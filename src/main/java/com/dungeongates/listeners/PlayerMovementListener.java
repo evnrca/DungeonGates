@@ -54,30 +54,43 @@ public final class PlayerMovementListener implements Listener {
             return;
         }
         
-        // Quick check: is player in any dungeon region?
+        // Get current world and region
+        String currentWorld = player.getWorld().getName();
         String currentRegion = worldGuardHook.getRegionAt(player.getLocation());
-        if (currentRegion == null && !lastKnownRegion.containsKey(player.getUniqueId())) {
+        String currentKey = (currentRegion != null) ? currentWorld + ":" + currentRegion : null;
+        
+        // Quick check: is player in any dungeon region?
+        String lastKey = lastKnownRegion.get(player.getUniqueId());
+        if (currentKey == null && lastKey == null) {
             // Player not in dungeon region and wasn't in one - skip
             return;
         }
         
-        String lastRegion = lastKnownRegion.get(player.getUniqueId());
+        String lastRegion = null;
+        String lastWorld = null;
+        if (lastKey != null && lastKey.contains(":")) {
+            String[] parts = lastKey.split(":", 2);
+            lastWorld = parts[0];
+            lastRegion = parts[1];
+        }
+        
+        String currentKeyForProgress = currentKey;
         
         // Update progress manager
-        progressManager.setCurrentRoom(player.getUniqueId(), currentRegion);
+        progressManager.setCurrentRoom(player.getUniqueId(), currentKey);
         
         // Player entered a new dungeon region
-        if (currentRegion != null && !currentRegion.equals(lastRegion)) {
-            handleRegionEntry(player, currentRegion, lastRegion, event.getFrom());
+        if (currentKey != null && !currentKey.equals(lastKey)) {
+            handleRegionEntry(player, currentWorld, currentRegion, lastWorld, lastRegion, event.getFrom());
         } 
         // Player left all dungeon regions
-        else if (currentRegion == null && lastRegion != null) {
-            handleDungeonExit(player, lastRegion);
+        else if (currentKey == null && lastKey != null) {
+            handleDungeonExit(player, lastWorld, lastRegion);
         }
         
         // Update cache (only non-null regions)
-        if (currentRegion != null) {
-            lastKnownRegion.put(player.getUniqueId(), currentRegion);
+        if (currentKey != null) {
+            lastKnownRegion.put(player.getUniqueId(), currentKey);
         }
     }
     
@@ -85,20 +98,23 @@ public final class PlayerMovementListener implements Listener {
     public void onPlayerTeleport(@NotNull PlayerTeleportEvent event) {
         // Check if teleporting out of dungeon
         Player player = event.getPlayer();
+        String fromWorld = event.getFrom().getWorld().getName();
         String fromRegion = worldGuardHook.getRegionAt(event.getFrom());
+        String toWorld = event.getTo().getWorld().getName();
         String toRegion = worldGuardHook.getRegionAt(event.getTo());
         
         // If teleporting from a dungeon region to outside, clear progress
-        if (fromRegion != null && roomManager.isRegisteredRegion(fromRegion)) {
-            if (toRegion == null || !roomManager.isRegisteredRegion(toRegion)) {
-                handleDungeonExit(player, fromRegion);
+        if (fromRegion != null && roomManager.isRegisteredRegion(fromRegion, fromWorld)) {
+            if (toRegion == null || !roomManager.isRegisteredRegion(toRegion, toWorld)) {
+                handleDungeonExit(player, fromWorld, fromRegion);
             }
         }
     }
     
-    private void handleRegionEntry(@NotNull Player player, @NotNull String newRegion, 
-                                    @Nullable String previousRegion, @NotNull Location fromLocation) {
-        Room newRoom = roomManager.getRoom(newRegion);
+    private void handleRegionEntry(@NotNull Player player, @NotNull String newWorld, @NotNull String newRegion, 
+                                    @Nullable String previousWorld, @Nullable String previousRegion, 
+                                    @NotNull Location fromLocation) {
+        Room newRoom = roomManager.getRoom(newRegion, newWorld);
         if (newRoom == null) return; // Not a dungeon room
         
         // Check if player is entering a completed room or first room - always allow
@@ -108,7 +124,8 @@ public final class PlayerMovementListener implements Listener {
             return;
         }
         
-        Room previousRoom = roomManager.getRoom(previousRegion);
+        Room previousRoom = (previousRegion != null && previousWorld != null) 
+            ? roomManager.getRoom(previousRegion, previousWorld) : null;
         
         // Allow entry if coming from a completed room (not necessarily the immediate previous)
         if (previousRoom != null) {
@@ -120,22 +137,22 @@ public final class PlayerMovementListener implements Listener {
                 updateLastValidLocation(player, newRoom);
                 sendProgressMessage(player, newRoom);
                 return;
-            }
-            
-            // Check if entering the immediate next room in sequence
-            if (roomManager.getNextRoom(previousRegion) == newRoom) {
-                // Player trying to progress to next room - check requirements
-                if (!progressManager.canEnterRoom(player.getUniqueId(), newRegion)) {
-                    // Requirements not met - deny entry
-                    handleFailedEntry(player, previousRoom, newRoom, fromLocation, event -> event.setCancelled(true));
-                    return;
-                }
-                
-                // Requirements met - allow entry
-                updateLastValidLocation(player, newRoom);
-                sendProgressMessage(player, newRoom);
+}
+        
+        // Check if entering the immediate next room in sequence
+        if (previousRoom != null && roomManager.getNextRoom(previousRegion, previousWorld) == newRoom) {
+            // Player trying to progress to next room - check requirements
+            if (!progressManager.canEnterRoom(player.getUniqueId(), newRoom.getUniqueKey())) {
+                // Requirements not met - deny entry
+                handleFailedEntry(player, previousRoom, newRoom, fromLocation, event -> event.setCancelled(true));
                 return;
             }
+            
+            // Requirements met - allow entry
+            updateLastValidLocation(player, newRoom);
+            sendProgressMessage(player, newRoom);
+            return;
+        }
         }
         
         // Allow entry to any other room (e.g., returning to previous rooms, or non-sequential)
@@ -148,7 +165,7 @@ public final class PlayerMovementListener implements Listener {
         
         // Check if this room itself is completed
         PlayerProgress progress = progressManager.getProgress(player.getUniqueId());
-        RoomProgress roomProgress = progress.getRoomProgress(newRoom.getRegion());
+        RoomProgress roomProgress = progress.getRoomProgress(newRoom.getUniqueKey());
         if (roomProgress != null && roomProgress.isCompleted()) {
             updateLastValidLocation(player, newRoom);
             sendProgressMessage(player, newRoom);
@@ -157,8 +174,8 @@ public final class PlayerMovementListener implements Listener {
         
         // Player is trying to enter a room they haven't completed and aren't progressing to
         // Deny entry
-        if (previousRegion != null) {
-            Room prev = roomManager.getRoom(previousRegion);
+        if (previousRegion != null && previousWorld != null) {
+            Room prev = roomManager.getRoom(previousRegion, previousWorld);
             if (prev != null) {
                 handleFailedEntry(player, prev, newRoom, fromLocation, event -> event.setCancelled(true));
                 return;
@@ -166,7 +183,7 @@ public final class PlayerMovementListener implements Listener {
         }
         
         // Fallback: deny entry and send back
-        Location center = plugin.getWorldGuardHook().getRegionCenter(newRoom.getRegion());
+        Location center = plugin.getWorldGuardHook().getRegionCenter(newRoom.getRegion(), newWorld);
         if (center != null) {
             player.teleport(center);
         }
@@ -217,7 +234,7 @@ public final class PlayerMovementListener implements Listener {
         if (backLocation != null && backLocation.getWorld() == player.getWorld()) {
             player.teleport(backLocation);
         } else {
-            Location center = plugin.getWorldGuardHook().getRegionCenter(fromRoom.getRegion());
+            Location center = plugin.getWorldGuardHook().getRegionCenter(fromRoom.getRegion(), fromRoom.getWorld());
             if (center != null) {
                 player.teleport(center);
             } else {
@@ -226,7 +243,7 @@ public final class PlayerMovementListener implements Listener {
         }
     }
     
-    private void handleDungeonExit(@NotNull Player player, @NotNull String lastRegion) {
+    private void handleDungeonExit(@NotNull Player player, @Nullable String lastWorld, @Nullable String lastRegion) {
         // Clear progress when leaving dungeon
         plugin.getProgressManager().resetProgress(player.getUniqueId());
         lastKnownRegion.remove(player.getUniqueId());

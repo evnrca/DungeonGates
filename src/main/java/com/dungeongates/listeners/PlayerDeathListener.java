@@ -7,7 +7,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
 import org.jetbrains.annotations.NotNull;
 
 public final class PlayerDeathListener implements Listener {
@@ -27,8 +26,9 @@ public final class PlayerDeathListener implements Listener {
         Player player = event.getEntity();
         
         // Check if player was in a dungeon region
+        String world = player.getWorld().getName();
         String region = worldGuardHook.getRegionAt(player.getLocation());
-        if (region != null && plugin.getRoomManager().isRegisteredRegion(region)) {
+        if (region != null && plugin.getRoomManager().isRegisteredRegion(region, world)) {
             // Player died in dungeon - clear all progress
             progressManager.resetProgress(player.getUniqueId());
             

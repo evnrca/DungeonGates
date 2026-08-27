@@ -116,24 +116,34 @@ public final class ConfigManager {
         return rooms;
     }
     
-    public void saveRoom(@NotNull String region, int requiredKills, int order) {
-        String path = "rooms." + region;
+    public void saveRoom(@NotNull String world, @NotNull String region, int requiredKills, int order) {
+        String path = "rooms." + world + ":" + region;
         config.set(path, requiredKills);
         save();
+    }
+    
+    // Legacy method
+    public void saveRoom(@NotNull String region, int requiredKills, int order) {
+        saveRoom("world", region, requiredKills, order);
     }
     
     public void saveRooms(@NotNull List<Room> rooms) {
         config.set("rooms", null);
         for (Room room : rooms) {
-            String path = "rooms." + room.getRegion();
+            String path = "rooms." + room.getWorld() + ":" + room.getRegion();
             config.set(path, room.getRequiredKills());
         }
         save();
     }
     
-    public void removeRoom(@NotNull String region) {
-        config.set("rooms." + region, null);
+    public void removeRoom(@NotNull String world, @NotNull String region) {
+        config.set("rooms." + world + ":" + region, null);
         save();
+    }
+    
+    // Legacy method
+    public void removeRoom(@NotNull String region) {
+        removeRoom("world", region);
     }
     
     // Getters
