@@ -56,33 +56,8 @@ public final class MythicMobKillListener implements Listener {
             return;
         }
         
-        // Add kill to player's progress using unique key
+        // Add kill to player's progress using unique key and send progress update
         String regionKey = world + ":" + region;
-        progressManager.addKill(killer.getUniqueId(), regionKey);
-        
-        // Send progress update to player
-        sendKillProgress(killer, regionKey);
-    }
-    
-    private void sendKillProgress(@NotNull Player player, @NotNull String regionKey) {
-        Room room = plugin.getRoomManager().getRoomByUniqueKey(regionKey);
-        if (room == null) return;
-        
-        PlayerProgress progress = progressManager.getProgress(player.getUniqueId());
-        RoomProgress roomProgress = progress.getRoomProgress(regionKey);
-        if (roomProgress == null) return;
-        
-        int current = roomProgress.getKills();
-        int required = room.getRequiredKills();
-        
-        // Send progress message
-        String msg = plugin.getConfigManager().getPrefixedMessage("progress");
-        msg = msg.replace("{current}", String.valueOf(current))
-                 .replace("{required}", String.valueOf(required));
-        player.sendMessage(colorize(msg));
-    }
-    
-    private String colorize(String msg) {
-        return msg.replace("&", "§");
+        progressManager.addKillAndNotify(killer.getUniqueId(), regionKey);
     }
 }

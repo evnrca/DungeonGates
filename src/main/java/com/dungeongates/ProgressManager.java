@@ -15,6 +15,8 @@ public final class ProgressManager {
     private final DungeonGatesPlugin plugin;
     private final DatabaseManager databaseManager;
     private final Map<UUID, PlayerProgress> progressMap = new ConcurrentHashMap<>();
+    // Track last chat progress message time per player to enforce cooldown
+    private final Map<UUID, Long> lastChatProgressTime = new ConcurrentHashMap<>();
     
     public ProgressManager(@NotNull DungeonGatesPlugin plugin) {
         this.plugin = plugin;
@@ -78,6 +80,61 @@ public final class ProgressManager {
             msg = msg.replace("{region}", regionName);
             player.sendMessage(colorize(msg));
         }
+    }
+    
+    /**
+     * Send kill progress to player via action bar and/or chat with cooldown
+     */
+    public void sendKillProgress(@NotNull UUID playerId, @NotNull String regionKey) {
+        Player player = Bukkit.getPlayer(playerId);
+        if (player == null || !player.isOnline()) return;
+        
+        Room room = plugin.getRoomManager().getRoomByUniqueKey(regionKey);
+        if (room == null) return;
+        
+        PlayerProgress progress = getProgressIfExists(playerId);
+        if (progress == null) return;
+        
+        RoomProgress roomProgress = progress.getRoomProgress(regionKey);
+        if (roomProgress == null) return;
+        
+        int current = roomProgress.getKills();
+        int required = room.getRequiredKills();
+        
+        // Action bar
+        if (plugin.getConfigManager().isActionBarEnabled()) {
+            String format = plugin.getConfigManager().getActionBarFormat();
+            String msg = format
+                .replace("{current}", String.valueOf(current))
+                .replace("{required}", String.valueOf(required))
+                .replace("{region}", room.getRegion());
+            player.sendActionBar(colorize(msg));
+        }
+        
+        // Chat with cooldown
+        if (plugin.getConfigManager().isChatEnabled()) {
+            long now = System.currentTimeMillis();
+            long cooldownMs = plugin.getConfigManager().getChatCooldown() * 1000L;
+            Long lastTime = lastChatProgressTime.get(playerId);
+            
+            if (lastTime == null || (now - lastTime) >= cooldownMs) {
+                String format = plugin.getConfigManager().getChatFormat();
+                String msg = format
+                    .replace("{current}", String.valueOf(current))
+                    .replace("{required}", String.valueOf(required))
+                    .replace("{region}", room.getRegion());
+                player.sendMessage(colorize(msg));
+                lastChatProgressTime.put(playerId, now);
+            }
+        }
+    }
+    
+    /**
+     * Call this when a kill is added to send progress updates
+     */
+    public void addKillAndNotify(@NotNull UUID playerId, @NotNull String regionKey) {
+        addKill(playerId, regionKey);
+        sendKillProgress(playerId, regionKey);
     }
     
     public boolean canEnterRoom(@NotNull UUID playerId, @NotNull String regionKey) {

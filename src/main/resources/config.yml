@@ -16,6 +16,18 @@ denial:
   sound-volume: 1.0
   sound-pitch: 1.0
 
+# Progress display settings
+progress-display:
+  # Show progress in action bar (above hotbar) when killing MythicMobs
+  action-bar:
+    enabled: true
+    format: "&eProgress: {current}/{required} MythicMobs killed"
+  # Show progress in chat when killing MythicMobs
+  chat:
+    enabled: true
+    format: "&8[&6Dungeon Gates&8] &eProgress: {current}/{required} MythicMobs killed"
+    cooldown: 5  # Seconds between chat messages to prevent spam
+
 messages:
   prefix: "&8[&6Dungeon Gates&8] "
   requirement-not-met: "&cYou need {remaining} more MythicMob kills to enter {region}!"

@@ -32,6 +32,13 @@ public final class ConfigManager {
     private float deniedSoundVolume = 1.0f;
     private float deniedSoundPitch = 1.0f;
     
+    // Progress display settings
+    private boolean actionBarEnabled = true;
+    private String actionBarFormat = "&eProgress: {current}/{required} MythicMobs killed";
+    private boolean chatEnabled = true;
+    private String chatFormat = "&8[&6Dungeon Gates&8] &eProgress: {current}/{required} MythicMobs killed";
+    private int chatCooldown = 5; // seconds
+    
     // Messages
     private String msgRequirementNotMet = "&cYou need {remaining} more MythicMob kills to enter {region}!";
     private String msgProgress = "&eProgress: {current}/{required} MythicMobs killed";
@@ -83,6 +90,13 @@ public final class ConfigManager {
         deniedSound = config.getString("denial.sound", deniedSound);
         deniedSoundVolume = (float) config.getDouble("denial.sound-volume", 1.0);
         deniedSoundPitch = (float) config.getDouble("denial.sound-pitch", 1.0);
+        
+        // Progress display settings
+        actionBarEnabled = config.getBoolean("progress-display.action-bar.enabled", true);
+        actionBarFormat = config.getString("progress-display.action-bar.format", actionBarFormat);
+        chatEnabled = config.getBoolean("progress-display.chat.enabled", true);
+        chatFormat = config.getString("progress-display.chat.format", chatFormat);
+        chatCooldown = config.getInt("progress-display.chat.cooldown", 5);
         
         // Messages
         msgRequirementNotMet = config.getString("messages.requirement-not-met", msgRequirementNotMet);
@@ -177,6 +191,27 @@ public final class ConfigManager {
     
     public float getDeniedSoundPitch() {
         return deniedSoundPitch;
+    }
+    
+    // Progress display getters
+    public boolean isActionBarEnabled() {
+        return actionBarEnabled;
+    }
+    
+    public @NotNull String getActionBarFormat() {
+        return actionBarFormat;
+    }
+    
+    public boolean isChatEnabled() {
+        return chatEnabled;
+    }
+    
+    public @NotNull String getChatFormat() {
+        return chatFormat;
+    }
+    
+    public int getChatCooldown() {
+        return chatCooldown;
     }
     
     public @NotNull String getMessage(@NotNull String key) {
