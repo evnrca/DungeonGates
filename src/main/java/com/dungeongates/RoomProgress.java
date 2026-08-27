@@ -13,6 +13,10 @@ public final class RoomProgress {
         kills++;
     }
     
+    public void setKills(int kills) {
+        this.kills = kills;
+    }
+    
     public boolean isCompleted() {
         return completed;
     }

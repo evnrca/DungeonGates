@@ -273,14 +273,14 @@ public final class DungeonGatesCommand implements CommandExecutor, TabCompleter 
             return true;
         }
         
-        UUID uuid = target.getUniqueId();
-        
+UUID uuid = target.getUniqueId();
+         
         if (args.length >= 3) {
             String region = args[2];
-            progressManager.resetProgress(uuid, region);
+            progressManager.resetProgressSync(uuid, region);
             sender.sendMessage(colorize("&aReset progress for &e" + target.getName() + " &ain &e" + region));
         } else {
-            progressManager.resetProgress(uuid);
+            progressManager.resetProgressSync(uuid);
             sender.sendMessage(colorize("&aReset all progress for &e" + target.getName()));
         }
         

@@ -23,6 +23,7 @@ public final class DungeonGatesPlugin extends JavaPlugin {
     private RoomManager roomManager;
     private ProgressManager progressManager;
     private ConfigManager configManager;
+    private DatabaseManager databaseManager;
     private boolean debugMode = false;
     
     @Override
@@ -50,6 +51,8 @@ public final class DungeonGatesPlugin extends JavaPlugin {
         
         // Initialize managers
         roomManager = new RoomManager(this);
+        databaseManager = new DatabaseManager(this);
+        databaseManager.initialize();
         progressManager = new ProgressManager(this);
         
         // Load rooms
@@ -72,6 +75,13 @@ public final class DungeonGatesPlugin extends JavaPlugin {
     
     @Override
     public void onDisable() {
+        // Save all progress before closing
+        if (progressManager != null) {
+            progressManager.saveAllProgress();
+        }
+        if (databaseManager != null) {
+            databaseManager.close();
+        }
         getLogger().info("DungeonGates disabled.");
     }
     
@@ -103,6 +113,10 @@ public final class DungeonGatesPlugin extends JavaPlugin {
     
     public @NotNull ConfigManager getConfigManager() {
         return configManager;
+    }
+    
+    public @NotNull DatabaseManager getDatabaseManager() {
+        return databaseManager;
     }
     
     public boolean isDebugMode() {

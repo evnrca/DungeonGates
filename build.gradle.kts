@@ -41,6 +41,9 @@ dependencies {
     // MythicMobs API
     compileOnly("io.lumine:Mythic-Dist:5.6.0")
 
+    // SQLite JDBC for progress persistence
+    implementation("org.xerial:sqlite-jdbc:3.46.0.0")
+
     implementation("org.yaml:snakeyaml:2.3")
 }
 

@@ -24,7 +24,7 @@ public final class PlayerQuitListener implements Listener {
     public void onPlayerQuit(@NotNull org.bukkit.event.player.PlayerQuitEvent event) {
         // Clear progress on logout if player was in a dungeon
         // We can't easily check location on quit, so clear all progress
-        // This is the safest approach
-        progressManager.resetProgress(event.getPlayer().getUniqueId());
+        // This is the safest approach - use sync to ensure DB is updated
+        progressManager.resetProgressSync(event.getPlayer().getUniqueId());
     }
 }
