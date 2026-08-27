@@ -23,6 +23,7 @@ public final class DungeonGatesPlugin extends JavaPlugin {
     private RoomManager roomManager;
     private ProgressManager progressManager;
     private ConfigManager configManager;
+    private boolean debugMode = false;
     
     @Override
     public void onEnable() {
@@ -102,5 +103,13 @@ public final class DungeonGatesPlugin extends JavaPlugin {
     
     public @NotNull ConfigManager getConfigManager() {
         return configManager;
+    }
+    
+    public boolean isDebugMode() {
+        return debugMode;
+    }
+    
+    public void setDebugMode(boolean debugMode) {
+        this.debugMode = debugMode;
     }
 }

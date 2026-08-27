@@ -47,6 +47,7 @@ public final class DungeonGatesCommand implements CommandExecutor, TabCompleter 
             case "status" -> handleStatus(sender, args);
             case "reset" -> handleReset(sender, args);
             case "reload" -> handleReload(sender);
+            case "debug" -> handleDebug(sender, args);
             default -> {
                 sendHelp(sender);
                 yield true;
@@ -65,6 +66,7 @@ public final class DungeonGatesCommand implements CommandExecutor, TabCompleter 
         sender.sendMessage(colorize("&e/dg status [player] &7- Check progress"));
         sender.sendMessage(colorize("&e/dg reset <player> [world] [region] &7- Reset progress"));
         sender.sendMessage(colorize("&e/dg reload &7- Reload config"));
+        sender.sendMessage(colorize("&e/dg debug [on|off] &7- Toggle debug mode"));
     }
     
     private boolean handleAdd(@NotNull CommandSender sender, @NotNull String[] args) {
@@ -224,6 +226,31 @@ public final class DungeonGatesCommand implements CommandExecutor, TabCompleter 
             }
         }
         
+        return true;
+    }
+    
+    private boolean handleDebug(@NotNull CommandSender sender, @NotNull String[] args) {
+        if (!sender.hasPermission("dungeongates.admin")) {
+            sender.sendMessage(colorize("&cNo permission."));
+            return true;
+        }
+        
+        if (args.length >= 2) {
+            String state = args[1].toLowerCase();
+            if (state.equals("on") || state.equals("true") || state.equals("1")) {
+                plugin.setDebugMode(true);
+                sender.sendMessage(colorize("&aDebug mode &eenabled&a."));
+            } else if (state.equals("off") || state.equals("false") || state.equals("0")) {
+                plugin.setDebugMode(false);
+                sender.sendMessage(colorize("&cDebug mode &edisabled&c."));
+            } else {
+                sender.sendMessage(colorize("&cUsage: /dg debug [on|off]"));
+            }
+        } else {
+            // Toggle
+            plugin.setDebugMode(!plugin.isDebugMode());
+            sender.sendMessage(colorize((plugin.isDebugMode() ? "&a" : "&c") + "Debug mode " + (plugin.isDebugMode() ? "enabled" : "disabled") + "."));
+        }
         return true;
     }
     
