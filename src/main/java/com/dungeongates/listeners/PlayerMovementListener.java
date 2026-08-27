@@ -1,13 +1,12 @@
 package com.dungeongates.listeners;
 
 import com.dungeongates.DungeonGatesPlugin;
-import com.dungeongates.dungeon.DungeonRoom;
-import com.dungeongates.dungeon.PlayerProgress;
-import com.dungeongates.dungeon.ProgressManager;
-import com.dungeongates.dungeon.RoomManager;
-import com.dungeongates.dungeon.RoomProgress;
-import com.dungeongates.integrations.WorldGuardHook;
-import com.dungeongates.utils.MessageUtil;
+import com.dungeongates.ProgressManager;
+import com.dungeongates.Room;
+import com.dungeongates.RoomManager;
+import com.dungeongates.RoomProgress;
+import com.dungeongates.PlayerProgress;
+import com.dungeongates.hooks.WorldGuardHook;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -18,7 +17,6 @@ import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -28,183 +26,150 @@ public final class PlayerMovementListener implements Listener {
     private final ProgressManager progressManager;
     private final RoomManager roomManager;
     private final WorldGuardHook worldGuardHook;
-    private final ConfigManager.FailedProgressionConfig failedProgression;
     
-    // Cache player's last known room to avoid redundant checks
-    private final Map<UUID, String> lastKnownRoom = new java.util.concurrent.ConcurrentHashMap<>();
+    // Cache player's last known region
+    private final Map<UUID, String> lastKnownRegion = new java.util.concurrent.ConcurrentHashMap<>();
     
-    public PlayerMovementListener(@NotNull DungeonGatesPlugin plugin, @NotNull ProgressManager progressManager, 
-                                   @NotNull RoomManager roomManager, @NotNull WorldGuardHook worldGuardHook) {
+    public PlayerMovementListener(@NotNull DungeonGatesPlugin plugin) {
         this.plugin = plugin;
-        this.progressManager = progressManager;
-        this.roomManager = roomManager;
-        this.worldGuardHook = worldGuardHook;
-        this.failedProgression = plugin.getConfigManager().getFailedProgression();
+        this.progressManager = plugin.getProgressManager();
+        this.roomManager = plugin.getRoomManager();
+        this.worldGuardHook = plugin.getWorldGuardHook();
     }
     
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onPlayerMove(@NotNull PlayerMoveEvent event) {
         Player player = event.getPlayer();
         
-        // Only check if player actually changed blocks
+        // Only check if player changed blocks
         if (event.getFrom().getBlockX() == event.getTo().getBlockX() &&
             event.getFrom().getBlockY() == event.getTo().getBlockY() &&
             event.getFrom().getBlockZ() == event.getTo().getBlockZ()) {
             return;
         }
         
-        // Get current room at new location
-        DungeonRoom currentRoom = worldGuardHook.getRoomAt(player.getLocation());
-        String currentRoomName = currentRoom != null ? currentRoom.getName() : null;
+        // Get current region
+        String currentRegion = worldGuardHook.getRegionAt(player.getLocation());
+        String lastRegion = lastKnownRegion.get(player.getUniqueId());
         
-        // Update progress manager with current room
-        progressManager.setCurrentRoom(player.getUniqueId(), currentRoomName);
+        // Update progress manager
+        progressManager.setCurrentRoom(player.getUniqueId(), currentRegion);
         
-        // Check if player entered a new dungeon room
-        String lastRoom = lastKnownRoom.get(player.getUniqueId());
-        
-        if (currentRoomName != null && !currentRoomName.equals(lastRoom)) {
-            // Player entered a new room
-            handleRoomEntry(player, currentRoom, lastRoom, event.getFrom());
-        } else if (currentRoomName == null && lastRoom != null) {
-            // Player left all dungeon rooms
-            handleDungeonExit(player, lastRoom);
+        // Player entered a new dungeon region
+        if (currentRegion != null && !currentRegion.equals(lastRegion)) {
+            handleRegionEntry(player, currentRegion, lastRegion, event.getFrom());
+        } else if (currentRegion == null && lastRegion != null) {
+            // Player left all dungeon regions
         }
         
-        lastKnownRoom.put(player.getUniqueId(), currentRoomName);
+        lastKnownRegion.put(player.getUniqueId(), currentRegion);
     }
     
-    private void handleRoomEntry(@NotNull Player player, @NotNull DungeonRoom newRoom, @Nullable String previousRoomName, @NotNull Location fromLocation) {
-        // Check if this is the first room (order 0) - always allow
+    private void handleRegionEntry(@NotNull Player player, @NotNull String newRegion, 
+                                    @Nullable String previousRegion, @NotNull Location fromLocation) {
+        Room newRoom = roomManager.getRoom(newRegion);
+        if (newRoom == null) return; // Not a dungeon room
+        
+        // First room is always accessible
         if (newRoom.getOrder() == 0) {
             sendProgressMessage(player, newRoom);
             return;
         }
         
         // Check if coming from previous room in sequence
-        if (previousRoomName != null) {
-            DungeonRoom previousRoom = roomManager.getRoom(previousRoomName);
-            if (previousRoom != null && roomManager.getNextRoom(previousRoomName) == newRoom) {
-                // Player is trying to progress to next room
-                if (!progressManager.canEnterRoom(player.getUniqueId(), newRoom.getName())) {
-                    // Requirements not met - push back
-                    handleFailedProgression(player, previousRoom, newRoom, fromLocation);
+        if (previousRegion != null) {
+            Room previousRoom = roomManager.getRoom(previousRegion);
+            if (previousRoom != null && roomManager.getNextRoom(previousRegion) == newRoom) {
+                // Player trying to progress to next room
+                if (!progressManager.canEnterRoom(player.getUniqueId(), newRegion)) {
+                    // Requirements not met - deny entry
+                    handleFailedEntry(player, previousRoom, newRoom, fromLocation);
                     return;
                 }
             }
         }
         
-        // Allow entry (either not progressing sequentially, or requirements met)
+        // Allow entry (not progressing sequentially, or requirements met)
         sendProgressMessage(player, newRoom);
     }
     
-    private void handleDungeonExit(@NotNull Player player, @NotNull String previousRoomName) {
-        // Player completely left the dungeon
-        // Could trigger progress reset if configured
-    }
-    
-    private void handleFailedProgression(@NotNull Player player, @NotNull DungeonRoom fromRoom, @NotNull DungeonRoom toRoom, @NotNull Location fromLocation) {
+    private void handleFailedEntry(@NotNull Player player, @NotNull Room fromRoom, 
+                                    @NotNull Room toRoom, @NotNull Location fromLocation) {
         PlayerProgress progress = progressManager.getProgress(player.getUniqueId());
-        RoomProgress roomProgress = progress.getProgress(fromRoom.getName());
+        RoomProgress fromProgress = progress.getRoomProgress(fromRoom.getRegion());
         
-        int currentKills = roomProgress != null ? roomProgress.getTotalKills() : 0;
+        int currentKills = fromProgress != null ? fromProgress.getKills() : 0;
         int requiredKills = fromRoom.getRequiredKills();
         int remaining = Math.max(0, requiredKills - currentKills);
         
-        Map<String, String> placeholders = Map.of(
-            "player", player.getName(),
-            "room", fromRoom.getName(),
-            "current_room", fromRoom.getName(),
-            "next_room", toRoom.getName(),
-            "current_kills", String.valueOf(currentKills),
-            "required_kills", String.valueOf(requiredKills),
-            "remaining_kills", String.valueOf(remaining),
-            "progress_percent", String.format("%.1f", requiredKills > 0 ? (currentKills * 100.0 / requiredKills) : 0)
-        );
-        
-        // Send denial messages
-        List<String> messages = plugin.getConfigManager().getMessage("requirements-not-met");
-        for (String msg : messages) {
-            MessageUtil.send(player, msg, placeholders);
-        }
+        // Send denial message
+        String msg = plugin.getConfigManager().getPrefixedMessage("requirement-not-met");
+        msg = msg.replace("{remaining}", String.valueOf(remaining))
+                 .replace("{region}", fromRoom.getRegion());
+        player.sendMessage(colorize(msg));
         
         // Apply configured action
-        switch (failedProgression.action) {
+        String action = plugin.getConfigManager().getFailedEntryAction();
+        
+        switch (action) {
             case "VELOCITY" -> applyVelocity(player, fromRoom);
             case "TELEPORT" -> applyTeleport(player, fromRoom);
+            case "CANCEL" -> player.teleport(fromLocation);
             case "KNOCKBACK" -> applyKnockback(player, fromRoom);
-            case "CANCEL" -> {
-                // Just cancel movement - player stays at boundary
-                player.teleport(fromLocation);
-            }
         }
     }
     
-    private void applyVelocity(@NotNull Player player, @NotNull DungeonRoom room) {
-        // Calculate push direction back into the room
+    private void applyVelocity(@NotNull Player player, @NotNull Room room) {
         Location center = plugin.getWorldGuardHook().getRegionCenter(room.getRegion());
         if (center == null) return;
         
         Vector direction = player.getLocation().toVector().subtract(center.toVector()).normalize();
         
         Vector velocity = new Vector(
-            direction.getX() * failedProgression.velocityHorizontal,
-            failedProgression.velocityVertical,
-            direction.getZ() * failedProgression.velocityHorizontal
+            direction.getX() * plugin.getConfigManager().getVelocityHorizontal(),
+            plugin.getConfigManager().getVelocityVertical(),
+            direction.getZ() * plugin.getConfigManager().getVelocityHorizontal()
         );
         
         player.setVelocity(velocity);
     }
     
-    private void applyTeleport(@NotNull Player player, @NotNull DungeonRoom room) {
-        if (failedProgression.teleportUseLastLocation) {
-            // Try to find a safe spot in the previous room
-            Location center = plugin.getWorldGuardHook().getRegionCenter(room.getRegion());
-            if (center != null) {
-                player.teleport(center);
-            }
+    private void applyTeleport(@NotNull Player player, @NotNull Room room) {
+        Location center = plugin.getWorldGuardHook().getRegionCenter(room.getRegion());
+        if (center != null) {
+            player.teleport(center);
         }
     }
     
-    private void applyKnockback(@NotNull Player player, @NotNull DungeonRoom room) {
+    private void applyKnockback(@NotNull Player player, @NotNull Room room) {
         Location center = plugin.getWorldGuardHook().getRegionCenter(room.getRegion());
         if (center == null) return;
         
         Vector direction = player.getLocation().toVector().subtract(center.toVector()).normalize();
         
         Vector velocity = new Vector(
-            direction.getX() * failedProgression.knockbackHorizontal,
-            failedProgression.knockbackVertical,
-            direction.getZ() * failedProgression.knockbackHorizontal
+            direction.getX() * 1.0,
+            0.3,
+            direction.getZ() * 1.0
         );
         
         player.setVelocity(velocity);
     }
     
-    private void sendProgressMessage(@NotNull Player player, @NotNull DungeonRoom room) {
+    private void sendProgressMessage(@NotNull Player player, @NotNull Room room) {
         PlayerProgress progress = progressManager.getProgress(player.getUniqueId());
-        RoomProgress roomProgress = progress.getProgress(room.getName());
+        RoomProgress roomProgress = progress.getRoomProgress(room.getRegion());
         
-        int currentKills = roomProgress != null ? roomProgress.getTotalKills() : 0;
-        int requiredKills = room.getRequiredKills();
-        int remaining = Math.max(0, requiredKills - currentKills);
-        double percent = requiredKills > 0 ? (currentKills * 100.0 / requiredKills) : 100.0;
+        int current = roomProgress != null ? roomProgress.getKills() : 0;
+        int required = room.getRequiredKills();
         
-        Map<String, String> placeholders = Map.of(
-            "player", player.getName(),
-            "room", room.getName(),
-            "current_room", room.getName(),
-            "current_kills", String.valueOf(currentKills),
-            "required_kills", String.valueOf(requiredKills),
-            "remaining_kills", String.valueOf(remaining),
-            "progress_percent", String.format("%.1f", percent)
-        );
-        
-        // Only send progress message occasionally or on room entry
-        // For now, send on every room entry
-        List<String> messages = plugin.getConfigManager().getMessage("room-progress");
-        for (String msg : messages) {
-            MessageUtil.send(player, msg, placeholders);
-        }
+        String msg = plugin.getConfigManager().getPrefixedMessage("progress");
+        msg = msg.replace("{current}", String.valueOf(current))
+                 .replace("{required}", String.valueOf(required));
+        player.sendMessage(colorize(msg));
+    }
+    
+    private String colorize(String msg) {
+        return msg.replace("&", "§");
     }
 }

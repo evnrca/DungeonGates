@@ -1,103 +1,24 @@
 # DungeonGates Configuration
-# 
-# Documentation: https://github.com/dungeongates
-# Support: https://github.com/dungeongates/issues
 
-# Progress tracking mode
-# INDIVIDUAL - Each player tracks their own progress (default)
-# SHARED - Progress is shared across all players in the dungeon
-settings:
-  progress-mode: INDIVIDUAL
-
-# Action to take when player fails to meet requirements for next room
-failed-progression:
-  # Supported actions: VELOCITY, TELEPORT, CANCEL, KNOCKBACK
+# Action when player tries to enter next room without completing current
+# VELOCITY, TELEPORT, CANCEL, KNOCKBACK
+failed-entry:
   action: VELOCITY
-  
-  # VELOCITY settings
   velocity:
     horizontal: 1.5
     vertical: 0.4
-  
-  # TELEPORT settings
-  teleport:
-    # true = teleport to last valid location in previous room
-    # false = teleport to region center of previous room
-    use-last-location: true
-  
-  # KNOCKBACK settings
-  knockback:
-    horizontal: 1.0
-    vertical: 0.3
 
-# Message configuration
 messages:
   prefix: "&8[&6Dungeon Gates&8] "
-  
-  # Displayed when player tries to enter next room without completing current
-  requirements-not-met:
-    - "&cYou cannot proceed yet!"
-    - "&7You still need to kill &e{remaining_kills} &7more MythicMobs in &e{current_room}&7."
-  
-  # Displayed when player completes a room
-  room-completed:
-    - "&aRoom &e{current_room} &acompleted!"
-    - "&eYou may now proceed to the next room."
-  
-  # Displayed when checking progress
-  room-progress:
-    - "&eProgress in &f{current_room}&e: &f{current_kills}&7/&f{required_kills} &e(&f{progress_percent}%&e)"
-  
-  # Command feedback messages
-  room-added: "&aSuccessfully added room &e{room} &awith requirement of &e{kills} &aMythicMob kills."
-  room-removed: "&aSuccessfully removed room &e{room}&a."
-  room-already-exists: "&cRoom &e{room} &cis already registered."
-  region-not-found: "&cWorldGuard region &e{region} &cdoes not exist."
-  invalid-kills: "&cKill requirement must be a positive number."
-  no-rooms-registered: "&eNo dungeon rooms are currently registered."
-  rooms-list-header: "&6=== &eDungeon Gates Rooms &6==="
-  rooms-list-format: "&e{index}. &f{room} &7- &e{kills} &7MythicMob kills"
-  rooms-list-footer: "&6=============================="
-  
-  status-current-room: "&eCurrent Room: &f{room}"
-  status-progress: "&eMythicMob Kills: &f{current}&7/&f{required} &7(&f{remaining} &7remaining)"
-  status-completed: "&aRoom completed! You may proceed."
-  
-  progress-reset: "&aProgress reset for &e{player}&a."
-  progress-reset-room: "&aProgress reset for &e{player} &ain room &e{room}&a."
-  config-reloaded: "&aConfiguration reloaded successfully."
-  
-  # Error messages
-  error-player-not-found: "&cPlayer &e{player} &cnot found."
-  error-no-progress: "&eNo progress found for &e{player}&e."
-  error-not-in-dungeon: "&cYou are not currently in a registered dungeon room."
-  error-generic: "&cAn error occurred. Check console for details."
+  requirement-not-met: "&cYou need {remaining} more MythicMob kills!"
+  progress: "&eProgress: {current}/{required}"
+  completed: "&aRoom requirement completed!"
 
-# Progress reset behavior
-progress-reset:
-  on-player-death: false
-  on-server-restart: false
-  on-dungeon-exit: false
-  on-completion: true
-
-# Dungeon rooms configuration
-# Format:
-# rooms:
-#   room1:
-#     region: "room1"
-#     required-mythicmob-kills: 10
-#   room2:
-#     region: "room2"
-#     required-mythicmob-kills: 20
-rooms: {}
-
-# Future expansion: Specific MythicMob requirements
-# When enabled, only kills of specified mobs count toward requirements
-requirements:
-  total-mythicmob-kills: 0
-  specific-mythicmobs:
-    enabled: false
-    mobs: {}
-    # Example:
-    # DUNGEON_ZOMBIE: 5
-    # DUNGEON_SPIDER: 3
+# Dungeon rooms
+# Format: region: kills
+# Order determines progression: first = first room
+rooms:
+  # Example:
+  # room1: 10
+  # room2: 15
+  # room3: 20

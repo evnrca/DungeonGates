@@ -3,8 +3,7 @@ version: 1.0.0
 main: com.dungeongates.DungeonGatesPlugin
 api-version: 1.21
 author: DungeonGates Team
-description: A dungeon progression plugin requiring MythicMob kills to advance through WorldGuard regions
-website: https://github.com/dungeongates
+description: Dungeon progression plugin using WorldGuard regions and MythicMobs
 load: POSTWORLD
 
 depend:

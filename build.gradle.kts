@@ -15,24 +15,19 @@ java {
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
-    maven("https://repo.mythicmobs.net/snapshots/")
-    maven("https://ci.codemc.io/repository/maven-public/")
-    maven("https://jitpack.io")
 }
 
 dependencies {
+    // Only Paper API - everything else via reflection
     compileOnly("io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT")
-    compileOnly("com.sk89q.worldguard:worldguard-bukkit-platform:7.0.12")
-    compileOnly("com.sk89q.worldguard:worldguard-core:7.0.12")
-    compileOnly("io.github.mythicmobs:mythicmobs-api:5.6.0")
-    compileOnly("me.clip:placeholderapi:2.11.7")
     
+    // SnakeYAML - shaded into final JAR
     implementation("org.yaml:snakeyaml:2.3")
 }
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
-    options.compilerArgs << "-Xlint:unchecked" << "-Xlint:deprecation"
+    options.compilerArgs = listOf("-Xlint:unchecked", "-Xlint:deprecation")
 }
 
 tasks.shadowJar {
@@ -65,5 +60,3 @@ tasks.jar {
         )
     }
 }
-
-tasks.build.dependsOn(tasks.shadowJar)

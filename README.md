@@ -1,6 +1,6 @@
 # DungeonGates
 
-A production-ready Minecraft Paper plugin for creating dungeon progression systems using WorldGuard regions and MythicMobs.
+ Minecraft Paper plugin for creating dungeon progression systems using WorldGuard regions and MythicMobs.
 
 [![Paper](https://img.shields.io/badge/Paper-1.21.1+-blue)](https://papermc.io/)
 [![Java](https://img.shields.io/badge/Java-21-orange)](https://openjdk.org/)

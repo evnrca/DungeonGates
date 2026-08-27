@@ -1,10 +1,9 @@
 package com.dungeongates.listeners;
 
 import com.dungeongates.DungeonGatesPlugin;
-import com.dungeongates.dungeon.ProgressManager;
-import com.dungeongates.integrations.MythicMobsHook;
-import com.dungeongates.integrations.WorldGuardHook;
-import com.dungeongates.utils.MessageUtil;
+import com.dungeongates.ProgressManager;
+import com.dungeongates.hooks.MythicMobsHook;
+import com.dungeongates.hooks.WorldGuardHook;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -19,17 +18,16 @@ public final class MythicMobKillListener implements Listener {
     private final MythicMobsHook mythicMobsHook;
     private final WorldGuardHook worldGuardHook;
     
-    public MythicMobKillListener(@NotNull DungeonGatesPlugin plugin, @NotNull ProgressManager progressManager,
-                                  @NotNull MythicMobsHook mythicMobsHook, @NotNull WorldGuardHook worldGuardHook) {
+    public MythicMobKillListener(@NotNull DungeonGatesPlugin plugin) {
         this.plugin = plugin;
-        this.progressManager = progressManager;
-        this.mythicMobsHook = mythicMobsHook;
-        this.worldGuardHook = worldGuardHook;
+        this.progressManager = plugin.getProgressManager();
+        this.mythicMobsHook = plugin.getMythicMobsHook();
+        this.worldGuardHook = plugin.getWorldGuardHook();
     }
     
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onEntityDeath(@NotNull EntityDeathEvent event) {
-        // Check if it's a valid MythicMob kill by a player
+        // Check if valid MythicMob kill by a player
         if (!mythicMobsHook.isValidKill(event)) {
             return;
         }
@@ -37,20 +35,16 @@ public final class MythicMobKillListener implements Listener {
         Player killer = event.getEntity().getKiller();
         if (killer == null) return;
         
-        // Get the MythicMob type
-        String mobType = mythicMobsHook.getMythicMobType(event);
+        // Get region where kill happened
+        String region = worldGuardHook.getRegionAt(event.getEntity().getLocation());
+        if (region == null) return;
         
-        // Get the room where the kill happened
-        DungeonRoom room = worldGuardHook.getRoomAt(event.getEntity().getLocation());
-        if (room == null) return;
-        
-        // Check if the killer is in the same room (or was when they killed)
-        // The entity's location at death should be in the room
-        if (!worldGuardHook.isInsideRegion(event.getEntity().getLocation(), room.getRegionName())) {
+        // Check if region is a dungeon room
+        if (!plugin.getRoomManager().isRegisteredRegion(region)) {
             return;
         }
         
         // Add kill to player's progress
-        progressManager.addKill(killer.getUniqueId(), room.getName(), mobType);
+        progressManager.addKill(killer.getUniqueId(), region);
     }
 }
