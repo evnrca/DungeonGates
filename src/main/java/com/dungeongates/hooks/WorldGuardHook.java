@@ -1,42 +1,30 @@
 package com.dungeongates.hooks;
 
 import com.dungeongates.DungeonGatesPlugin;
+import com.sk89q.worldedit.bukkit.BukkitAdapter;
+import com.sk89q.worldedit.math.BlockVector3;
+import com.sk89q.worldguard.WorldGuard;
+import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
+import com.sk89q.worldguard.protection.ApplicableRegionSet;
+import com.sk89q.worldguard.protection.managers.RegionManager;
+import com.sk89q.worldguard.protection.regions.ProtectedRegion;
+import com.sk89q.worldguard.protection.regions.RegionContainer;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.lang.reflect.Method;
 import java.util.*;
 import java.util.logging.Level;
 
 public final class WorldGuardHook {
     
     private final DungeonGatesPlugin plugin;
+    private WorldGuardPlugin worldGuardPlugin;
+    private RegionContainer regionContainer;
     private boolean initialized = false;
-    
-    // Reflection
-    private Object worldGuardInstance;
-    private Object platform;
-    private Object regionContainer;
-    
-    private Method getInstanceMethod;
-    private Method getPlatformMethod;
-    private Method getRegionContainerMethod;
-    private Method getRegionManagerMethod;
-    private Method getApplicableRegionsMethod;
-    private Method getRegionsMethod;
-    private Method getRegionMethod;
-    private Method getIdMethod;
-    private Method getMinimumPointMethod;
-    private Method getMaximumPointMethod;
-    private Method addMethod;
-    private Method divideMethod;
-    private Method adaptMethod;
-    private Method asBlockVectorMethod;
     
     public WorldGuardHook(@NotNull DungeonGatesPlugin plugin) {
         this.plugin = plugin;
@@ -44,89 +32,44 @@ public final class WorldGuardHook {
     
     public boolean initialize() {
         Plugin wgPlugin = Bukkit.getPluginManager().getPlugin("WorldGuard");
-        if (wgPlugin == null) {
+        if (!(wgPlugin instanceof WorldGuardPlugin)) {
             plugin.getLogger().severe("WorldGuard not found! This plugin requires WorldGuard 7.0+");
             return false;
         }
         
-        try {
-            Class<?> worldGuardClass = Class.forName("com.sk89q.worldguard.WorldGuard");
-            getInstanceMethod = worldGuardClass.getMethod("getInstance");
-            worldGuardInstance = getInstanceMethod.invoke(null);
-            
-            getPlatformMethod = worldGuardInstance.getClass().getMethod("getPlatform");
-            platform = getPlatformMethod.invoke(worldGuardInstance);
-            
-            getRegionContainerMethod = platform.getClass().getMethod("getRegionContainer");
-            regionContainer = getRegionContainerMethod.invoke(platform);
-            
-            // Load reflection classes
-            Class<?> blockVector3Class = Class.forName("com.sk89q.worldedit.math.BlockVector3");
-            Class<?> bukkitAdapterClass = Class.forName("com.sk89q.worldedit.bukkit.BukkitAdapter");
-            Class<?> regionManagerClass = Class.forName("com.sk89q.worldguard.protection.managers.RegionManager");
-            Class<?> applicableRegionSetClass = Class.forName("com.sk89q.worldguard.protection.ApplicableRegionSet");
-            Class<?> protectedRegionClass = Class.forName("com.sk89q.worldguard.protection.regions.ProtectedRegion");
-            
-            getRegionManagerMethod = regionContainer.getClass().getMethod("get", Class.forName("com.sk89q.worldedit.world.World"));
-            
-            getApplicableRegionsMethod = regionManagerClass.getMethod("getApplicableRegions", blockVector3Class);
-            getRegionsMethod = applicableRegionSetClass.getMethod("getRegions");
-            getRegionMethod = regionManagerClass.getMethod("getRegion", String.class);
-            
-            getIdMethod = protectedRegionClass.getMethod("getId");
-            getMinimumPointMethod = protectedRegionClass.getMethod("getMinimumPoint");
-            getMaximumPointMethod = protectedRegionClass.getMethod("getMaximumPoint");
-            
-            addMethod = blockVector3Class.getMethod("add", blockVector3Class);
-            divideMethod = blockVector3Class.getMethod("divide", int.class);
-            
-            adaptMethod = bukkitAdapterClass.getMethod("adapt", World.class);
-            asBlockVectorMethod = bukkitAdapterClass.getMethod("asBlockVector", Location.class);
-            
-            initialized = true;
-            plugin.getLogger().info("WorldGuard hook initialized via reflection (official API).");
-            return true;
-            
-        } catch (Exception e) {
-            plugin.getLogger().log(Level.SEVERE, "Failed to initialize WorldGuard hook via reflection", e);
-            return false;
-        }
+        this.worldGuardPlugin = (WorldGuardPlugin) wgPlugin;
+        this.regionContainer = WorldGuard.getInstance().getPlatform().getRegionContainer();
+        this.initialized = true;
+        
+        plugin.getLogger().info("WorldGuard hook initialized (direct API).");
+        return true;
     }
     
     public boolean isInitialized() {
         return initialized;
     }
     
-    public @Nullable Object getRegion(@NotNull String regionName, @Nullable String worldName) {
+    public @Nullable ProtectedRegion getRegion(@NotNull String regionName, @Nullable String worldName) {
         if (!initialized) return null;
         
-        try {
-            if (worldName != null) {
-                World world = Bukkit.getWorld(worldName);
-                if (world != null) {
-                    Object adapter = adaptMethod.invoke(null, world);
-                    Object manager = getRegionManagerMethod.invoke(regionContainer, adapter);
-                    if (manager != null) {
-                        Object region = getRegionMethod.invoke(manager, regionName);
-                        if (region != null) {
-                            return region;
-                        }
-                    }
+        if (worldName != null) {
+            org.bukkit.World world = Bukkit.getWorld(worldName);
+            if (world != null) {
+                RegionManager manager = regionContainer.get(BukkitAdapter.adapt(world));
+                if (manager != null) {
+                    return manager.getRegion(regionName);
                 }
-            } else {
-                for (World world : Bukkit.getWorlds()) {
-                    Object adapter = adaptMethod.invoke(null, world);
-                    Object manager = getRegionManagerMethod.invoke(regionContainer, adapter);
-                    if (manager == null) continue;
-                    
-                    Object region = getRegionMethod.invoke(manager, regionName);
+            }
+        } else {
+            for (org.bukkit.World world : Bukkit.getWorlds()) {
+                RegionManager manager = regionContainer.get(BukkitAdapter.adapt(world));
+                if (manager != null) {
+                    ProtectedRegion region = manager.getRegion(regionName);
                     if (region != null) {
                         return region;
                     }
                 }
             }
-        } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "Error getting region: " + regionName, e);
         }
         return null;
     }
@@ -142,39 +85,32 @@ public final class WorldGuardHook {
     public @Nullable String getRegionAt(@NotNull Location location) {
         if (!initialized) return null;
         
-        try {
-            Object adapter = adaptMethod.invoke(null, location.getWorld());
-            Object manager = getRegionManagerMethod.invoke(regionContainer, adapter);
-            if (manager == null) return null;
-            
-            Object blockVector = asBlockVectorMethod.invoke(null, location);
-            Object regionSet = getApplicableRegionsMethod.invoke(manager, blockVector);
-            if (regionSet == null) return null;
-            
-            Collection<?> regions = (Collection<?>) getRegionsMethod.invoke(regionSet);
-            if (regions == null || regions.isEmpty()) return null;
-            
-            // Find region with smallest area (most specific)
-            Object best = null;
-            int minArea = Integer.MAX_VALUE;
-            
-            for (Object region : regions) {
-                Object minPoint = getMinimumPointMethod.invoke(region);
-                Object maxPoint = getMaximumPointMethod.invoke(region);
-                int area = calculateArea(minPoint, maxPoint);
-                if (area < minArea) {
-                    minArea = area;
-                    best = region;
-                }
+        // Convert Location to BlockVector3 manually
+        BlockVector3 blockVector = new BlockVector3(
+            (int) location.getX(),
+            (int) location.getY(),
+            (int) location.getZ()
+        );
+        
+        RegionManager manager = regionContainer.get(BukkitAdapter.adapt(location.getWorld()));
+        if (manager == null) return null;
+        
+        ApplicableRegionSet regionSet = manager.getApplicableRegions(blockVector);
+        if (regionSet == null || regionSet.size() == 0) return null;
+        
+        // Find region with smallest area (most specific)
+        ProtectedRegion best = null;
+        int minArea = Integer.MAX_VALUE;
+        
+        for (ProtectedRegion region : regionSet) {
+            int area = calculateArea(region);
+            if (area < minArea) {
+                minArea = area;
+                best = region;
             }
-            
-            if (best != null) {
-                return (String) getIdMethod.invoke(best);
-            }
-        } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "Error getting region at location", e);
         }
-        return null;
+        
+        return best != null ? best.getId() : null;
     }
     
     public @Nullable String getRegionAt(@NotNull Player player) {
@@ -182,39 +118,30 @@ public final class WorldGuardHook {
     }
     
     public @Nullable Location getRegionCenter(@NotNull String regionName, @Nullable String worldName) {
-        Object region = getRegion(regionName, worldName);
+        ProtectedRegion region = getRegion(regionName, worldName);
         if (region == null) return null;
         
-        try {
-            Object minPoint = getMinimumPointMethod.invoke(region);
-            Object maxPoint = getMaximumPointMethod.invoke(region);
-            Object center = addMethod.invoke(minPoint, maxPoint);
-            center = divideMethod.invoke(center, 2);
-            
-            double x = getCoord(center, "getX");
-            double y = getCoord(center, "getY");
-            double z = getCoord(center, "getZ");
-            
-            // Find world containing this region
-            if (worldName != null) {
-                World world = Bukkit.getWorld(worldName);
-                if (world != null) {
+        BlockVector3 minPoint = region.getMinimumPoint();
+        BlockVector3 maxPoint = region.getMaximumPoint();
+        BlockVector3 center = minPoint.add(maxPoint).divide(2);
+        
+        double x = center.getX();
+        double y = center.getY();
+        double z = center.getZ();
+        
+        // Find world containing this region
+        if (worldName != null) {
+            org.bukkit.World world = Bukkit.getWorld(worldName);
+            if (world != null) {
+                return new Location(world, x, y, z);
+            }
+        } else {
+            for (org.bukkit.World world : Bukkit.getWorlds()) {
+                RegionManager manager = regionContainer.get(BukkitAdapter.adapt(world));
+                if (manager != null && manager.getRegion(regionName) != null) {
                     return new Location(world, x, y, z);
                 }
-            } else {
-                for (World world : Bukkit.getWorlds()) {
-                    Object adapter = adaptMethod.invoke(null, world);
-                    Object manager = getRegionManagerMethod.invoke(regionContainer, adapter);
-                    if (manager == null) continue;
-                    
-                    Object found = getRegionMethod.invoke(manager, regionName);
-                    if (found != null) {
-                        return new Location(world, x, y, z);
-                    }
-                }
             }
-        } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "Error getting region center", e);
         }
         return null;
     }
@@ -233,45 +160,26 @@ public final class WorldGuardHook {
         Set<String> regions = new HashSet<>();
         if (!initialized) return List.of();
         
-        try {
-            for (World world : Bukkit.getWorlds()) {
-                Object adapter = adaptMethod.invoke(null, world);
-                Object manager = getRegionManagerMethod.invoke(regionContainer, adapter);
-                if (manager == null) continue;
-                
-                Method getRegionsMapMethod = manager.getClass().getMethod("getRegions");
-                Map<?, ?> regionsMap = (Map<?, ?>) getRegionsMapMethod.invoke(manager);
-                if (regionsMap != null) {
-                    regions.addAll(regionsMap.keySet().stream().map(Object::toString).toList());
-                }
+        for (org.bukkit.World world : Bukkit.getWorlds()) {
+            RegionManager manager = regionContainer.get(BukkitAdapter.adapt(world));
+            if (manager != null) {
+                regions.addAll(manager.getRegions().keySet());
             }
-        } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "Error getting all region names", e);
         }
         return new ArrayList<>(regions);
     }
     
-    private int calculateArea(Object minPoint, Object maxPoint) {
-        try {
-            double minX = getCoord(minPoint, "getX");
-            double minY = getCoord(minPoint, "getY");
-            double minZ = getCoord(minPoint, "getZ");
-            double maxX = getCoord(maxPoint, "getX");
-            double maxY = getCoord(maxPoint, "getY");
-            double maxZ = getCoord(maxPoint, "getZ");
-            
-            return (int) Math.abs((maxX - minX) * (maxZ - minZ) * (maxY - minY));
-        } catch (Exception e) {
-            return Integer.MAX_VALUE;
-        }
-    }
-    
-    private double getCoord(Object point, String methodName) {
-        try {
-            Method method = point.getClass().getMethod(methodName);
-            return ((Number) method.invoke(point)).doubleValue();
-        } catch (Exception e) {
-            return 0;
-        }
+    private int calculateArea(@NotNull ProtectedRegion region) {
+        BlockVector3 minPoint = region.getMinimumPoint();
+        BlockVector3 maxPoint = region.getMaximumPoint();
+        
+        double minX = minPoint.getX();
+        double minY = minPoint.getY();
+        double minZ = minPoint.getZ();
+        double maxX = maxPoint.getX();
+        double maxY = maxPoint.getY();
+        double maxZ = maxPoint.getZ();
+        
+        return (int) Math.abs((maxX - minX) * (maxZ - minZ) * (maxY - minY));
     }
 }
