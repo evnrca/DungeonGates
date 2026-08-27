@@ -21,6 +21,10 @@ public final class ProgressManager {
         this.databaseManager = plugin.getDatabaseManager();
     }
     
+    public @NotNull DatabaseManager getDatabaseManager() {
+        return databaseManager;
+    }
+    
     public @NotNull PlayerProgress getProgress(@NotNull UUID playerId) {
         return progressMap.computeIfAbsent(playerId, id -> {
             PlayerProgress progress = new PlayerProgress(id);

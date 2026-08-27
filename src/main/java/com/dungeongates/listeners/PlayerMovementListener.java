@@ -1,5 +1,6 @@
 package com.dungeongates.listeners;
 
+import com.dungeongates.DatabaseManager;
 import com.dungeongates.DungeonGatesPlugin;
 import com.dungeongates.ProgressManager;
 import com.dungeongates.Room;
@@ -89,8 +90,10 @@ public final class PlayerMovementListener implements Listener {
         
         // Player moved between two different dungeon regions
         else if (currentKey != null && lastKey != null && !currentKey.equals(lastKey)) {
-            // Exiting one room, entering another - check exit from previous first
+            // Exiting one room, entering another - check BOTH exit and entry
             handleRegionExit(player, lastWorld, lastRegion, currentWorld, currentRegion, event.getFrom());
+            // Also check entry into the new room (allows returning to completed rooms)
+            handleRegionEntry(player, currentWorld, currentRegion, event.getFrom());
         }
         
         // Update cache
@@ -181,17 +184,17 @@ public final class PlayerMovementListener implements Listener {
             return;
         }
         
-        // Check if the room is completed
-        PlayerProgress progress = progressManager.getProgress(player.getUniqueId());
-        RoomProgress roomProgress = progress.getRoomProgress(fromRoom.getUniqueKey());
+        // Check if the room is completed - USE SYNC LOAD for critical check
+        DatabaseManager.RoomProgressData data = progressManager.getDatabaseManager().loadRoomProgressSync(player.getUniqueId(), fromRoom.getUniqueKey());
+        boolean completed = data != null && data.completed;
         
-        if (roomProgress != null && roomProgress.isCompleted()) {
+        if (completed) {
             debug(player, "Room completed - allowing exit");
             return;
         }
         
         // Room not completed - DENY EXIT (applies to ALL rooms including last room)
-        debug(player, "Room NOT completed - denying exit (kills: " + (roomProgress != null ? roomProgress.getKills() : 0) + "/" + fromRoom.getRequiredKills() + ")");
+        debug(player, "Room NOT completed - denying exit (kills: " + (data != null ? data.kills : 0) + "/" + fromRoom.getRequiredKills() + ")");
         handleFailedExit(player, fromRoom, fromLocation);
     }
     
@@ -209,11 +212,11 @@ public final class PlayerMovementListener implements Listener {
         // First room - always allow
         if (fromRoom.getOrder() == 0) return;
         
-        // Check completion
-        PlayerProgress progress = progressManager.getProgress(player.getUniqueId());
-        RoomProgress roomProgress = progress.getRoomProgress(fromRoom.getUniqueKey());
+        // Check completion - USE SYNC LOAD
+        DatabaseManager.RoomProgressData data = progressManager.getDatabaseManager().loadRoomProgressSync(player.getUniqueId(), fromRoom.getUniqueKey());
+        boolean completed = data != null && data.completed;
         
-        if (roomProgress != null && roomProgress.isCompleted()) return;
+        if (completed) return;
         
         // Not completed - cancel teleport and knockback
         event.setCancelled(true);
@@ -223,7 +226,7 @@ public final class PlayerMovementListener implements Listener {
     /**
      * Handle player ENTERING a dungeon region.
      * First room always allowed. Second+ rooms require previous room completion.
-     * This prevents skipping rooms.
+     * ALSO allows entry if target room itself is already completed (returning to completed rooms).
      */
     private void handleRegionEntry(@NotNull Player player, @NotNull String currentWorld, @NotNull String currentRegion, 
                                     @NotNull Location fromLocation) {
@@ -242,13 +245,20 @@ public final class PlayerMovementListener implements Listener {
             return;
         }
         
-        // Check if previous room is completed
+        // Check if TARGET room itself is already completed (allows returning to completed rooms)
+        DatabaseManager.RoomProgressData targetData = progressManager.getDatabaseManager().loadRoomProgressSync(player.getUniqueId(), newRoom.getUniqueKey());
+        if (targetData != null && targetData.completed) {
+            debug(player, "Target room already completed - allowing entry");
+            sendProgressMessage(player, newRoom);
+            return;
+        }
+        
+        // Check if previous room is completed (for progressing forward)
         Room previousRoom = roomManager.getPreviousRoom(currentRegion, currentWorld);
         if (previousRoom != null) {
-            PlayerProgress progress = progressManager.getProgress(player.getUniqueId());
-            RoomProgress prevProgress = progress.getRoomProgress(previousRoom.getUniqueKey());
-            
-            if (prevProgress == null || !prevProgress.isCompleted()) {
+            // Use sync load for previous room check too
+            DatabaseManager.RoomProgressData prevData = progressManager.getDatabaseManager().loadRoomProgressSync(player.getUniqueId(), previousRoom.getUniqueKey());
+            if (prevData == null || !prevData.completed) {
                 // Previous room not completed - DENY ENTRY
                 debug(player, "Previous room not completed - denying entry to " + newRoom.getUniqueKey());
                 handleFailedEntry(player, previousRoom, newRoom, fromLocation);
@@ -256,7 +266,7 @@ public final class PlayerMovementListener implements Listener {
             }
         }
         
-        // Previous room completed - allow entry
+        // Previous room completed - allow entry (progressing forward)
         sendProgressMessage(player, newRoom);
     }
     
