@@ -131,8 +131,8 @@ public final class PlayerMovementListener implements Listener {
         if (previousRoom != null && roomManager.getNextRoom(previousRegion, previousWorld) == newRoom) {
             // Player trying to progress to next room - check requirements
             if (!progressManager.canEnterRoom(player.getUniqueId(), newRoom.getUniqueKey())) {
-                // Requirements not met - deny entry
-                handleFailedEntry(player, previousRoom, newRoom, fromLocation, event -> event.setCancelled(true));
+                // Requirements not met - deny entry with title/knockback
+                handleFailedEntry(player, previousRoom, newRoom, fromLocation);
                 return;
             }
             
@@ -164,29 +164,25 @@ public final class PlayerMovementListener implements Listener {
         if (previousRegion != null && previousWorld != null) {
             Room prev = roomManager.getRoom(previousRegion, previousWorld);
             if (prev != null) {
-                handleFailedEntry(player, prev, newRoom, fromLocation, event -> event.setCancelled(true));
+                handleFailedEntry(player, prev, newRoom, fromLocation);
                 return;
             }
         }
         
-        // Fallback: deny entry and send back
-        Location center = plugin.getWorldGuardHook().getRegionCenter(newRoom.getRegion(), newWorld);
-        if (center != null) {
-            player.teleport(center);
-        }
+        // Fallback: knockback to keep player out
+        knockbackPlayer(player, fromLocation);
     }
     
     private void handleFailedEntry(@NotNull Player player, @NotNull Room fromRoom, 
-                                    @NotNull Room toRoom, @NotNull Location fromLocation,
-                                    @NotNull java.util.function.Consumer<PlayerMoveEvent> cancelAction) {
+                                    @NotNull Room toRoom, @NotNull Location fromLocation) {
         PlayerProgress progress = progressManager.getProgress(player.getUniqueId());
-        RoomProgress fromProgress = progress.getRoomProgress(fromRoom.getRegion());
+        RoomProgress fromProgress = progress.getRoomProgress(fromRoom.getUniqueKey());
         
         int currentKills = fromProgress != null ? fromProgress.getKills() : 0;
         int requiredKills = fromRoom.getRequiredKills();
         int remaining = Math.max(0, requiredKills - currentKills);
         
-        // Send title message
+        // Send title message (screen title + subtitle)
         String title = plugin.getConfigManager().getMessage("denied-title");
         String subtitle = plugin.getConfigManager().getMessage("denied-subtitle");
         title = title.replace("{remaining}", String.valueOf(remaining))
@@ -213,21 +209,43 @@ public final class PlayerMovementListener implements Listener {
                  .replace("{region}", fromRoom.getRegion());
         player.sendMessage(colorize(msg));
         
-        // Cancel movement and teleport back
-        cancelAction.accept(null); // We handle teleport manually
+        // Knockback player back into previous room (NOT teleport to center)
+        knockbackPlayer(player, fromLocation);
+    }
+    
+    private void knockbackPlayer(@NotNull Player player, @NotNull Location fromLocation) {
+        // Cancel movement and apply knockback toward previous room
+        Vector knockback = fromLocation.toVector().subtract(player.getLocation().toVector()).normalize();
         
-        // Teleport back to last valid location in previous room, or region center
-        Location backLocation = lastValidLocation.get(player.getUniqueId());
-        if (backLocation != null && backLocation.getWorld() == player.getWorld()) {
-            player.teleport(backLocation);
-        } else {
-            Location center = plugin.getWorldGuardHook().getRegionCenter(fromRoom.getRegion(), fromRoom.getWorld());
-            if (center != null) {
-                player.teleport(center);
-            } else {
-                player.teleport(fromLocation);
-            }
+        // If no direction (same location), push backward
+        if (knockback.length() < 0.1) {
+            knockback = player.getLocation().getDirection().multiply(-1);
         }
+        
+        // Apply knockback - horizontal + slight vertical
+        knockback.setY(0.4);
+        player.setVelocity(knockback.multiply(1.5));
+        
+        // Also cancel the move event by teleporting slightly back
+        // This ensures they stay in the previous room
+        Location backLoc = fromLocation.clone();
+        backLoc.setDirection(player.getLocation().getDirection());
+        final Vector finalKnockback = knockback;
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (player.isOnline() && player.getWorld().equals(fromLocation.getWorld())) {
+                // Check if still in wrong room, if so push back again
+                String currentRegion = worldGuardHook.getRegionAt(player.getLocation());
+                if (currentRegion != null && roomManager.isRegisteredRegion(currentRegion, player.getWorld().getName())) {
+                    Room current = roomManager.getRoom(currentRegion, player.getWorld().getName());
+                    if (current != null && current.getOrder() > 0) {
+                        Room prev = roomManager.getPreviousRoom(currentRegion, player.getWorld().getName());
+                        if (prev != null && !progressManager.canEnterRoom(player.getUniqueId(), current.getUniqueKey())) {
+                            player.setVelocity(finalKnockback);
+                        }
+                    }
+                }
+            }
+        }, 1L);
     }
     
     private void handleDungeonExit(@NotNull Player player, @Nullable String lastWorld, @Nullable String lastRegion) {
@@ -240,7 +258,7 @@ public final class PlayerMovementListener implements Listener {
     private void updateLastValidLocation(@NotNull Player player, @NotNull Room room) {
         // Store current location as last valid if in a completed room
         PlayerProgress progress = progressManager.getProgress(player.getUniqueId());
-        RoomProgress roomProgress = progress.getRoomProgress(room.getRegion());
+        RoomProgress roomProgress = progress.getRoomProgress(room.getUniqueKey());
         if (roomProgress != null && roomProgress.isCompleted()) {
             lastValidLocation.put(player.getUniqueId(), player.getLocation().clone());
         }
@@ -248,7 +266,7 @@ public final class PlayerMovementListener implements Listener {
     
     private void sendProgressMessage(@NotNull Player player, @NotNull Room room) {
         PlayerProgress progress = progressManager.getProgress(player.getUniqueId());
-        RoomProgress roomProgress = progress.getRoomProgress(room.getRegion());
+        RoomProgress roomProgress = progress.getRoomProgress(room.getUniqueKey());
         
         int current = roomProgress != null ? roomProgress.getKills() : 0;
         int required = room.getRequiredKills();
