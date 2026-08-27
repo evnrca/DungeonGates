@@ -162,7 +162,7 @@ public final class PlayerMovementListener implements Listener {
     /**
      * Handle player EXITING a dungeon region.
      * Prevents leaving a room before completing required kills.
-     * First room (order 0) always allowed. Last room requires completion like any other room.
+     * ALL rooms (including first) require completion before exit.
      */
     private void handleRegionExit(@NotNull Player player, @Nullable String fromWorld, @Nullable String fromRegion, 
                                     @Nullable String toWorld, @Nullable String toRegion, 
@@ -180,12 +180,6 @@ public final class PlayerMovementListener implements Listener {
         
         debug(player, "Attempting to exit room: " + fromRoom.getUniqueKey() + " (order: " + fromRoom.getOrder() + ")");
         
-        // First room (order 0) - always allow exit
-        if (fromRoom.getOrder() == 0) {
-            debug(player, "First room - allowing exit");
-            return;
-        }
-        
         // Check if the room is completed - USE SYNC LOAD for critical check
         DatabaseManager.RoomProgressData data = progressManager.getDatabaseManager().loadRoomProgressSync(player.getUniqueId(), fromRoom.getUniqueKey());
         boolean completed = data != null && data.completed;
@@ -195,7 +189,7 @@ public final class PlayerMovementListener implements Listener {
             return;
         }
         
-        // Room not completed - DENY EXIT (applies to ALL rooms including last room)
+        // Room not completed - DENY EXIT (applies to ALL rooms including first room)
         debug(player, "Room NOT completed - denying exit (kills: " + (data != null ? data.kills : 0) + "/" + fromRoom.getRequiredKills() + ")");
         handleFailedExit(player, fromRoom, fromLocation);
     }
@@ -203,6 +197,7 @@ public final class PlayerMovementListener implements Listener {
     /**
      * Handle safe teleport exit (like /spawn, /home, etc.)
      * Allows the teleport but resets progress.
+     * Requires completion for ALL rooms (including first) before allowing safe exit.
      */
     private void handleSafeTeleportExit(@NotNull Player player, @NotNull String fromWorld, @NotNull String fromRegion) {
         Room fromRoom = roomManager.getRoom(fromRegion, fromWorld);
@@ -210,6 +205,18 @@ public final class PlayerMovementListener implements Listener {
         
         // Admin bypass - don't reset
         if (player.hasPermission("dungeongates.bypass")) return;
+        
+        // Check if the room is completed - USE SYNC LOAD for critical check
+        DatabaseManager.RoomProgressData data = progressManager.getDatabaseManager().loadRoomProgressSync(player.getUniqueId(), fromRoom.getUniqueKey());
+        boolean completed = data != null && data.completed;
+        
+        if (!completed) {
+            // Not completed - deny exit and knockback (like walking exit)
+            debug(player, "Safe teleport exit denied - room not completed (kills: " + (data != null ? data.kills : 0) + "/" + fromRoom.getRequiredKills() + ")");
+            // Use fromLocation - but we don't have it here, need to get player's current location
+            handleFailedExit(player, fromRoom, player.getLocation());
+            return;
+        }
         
         debug(player, "Safe teleport exit from " + fromRoom.getUniqueKey() + " - resetting progress");
         
